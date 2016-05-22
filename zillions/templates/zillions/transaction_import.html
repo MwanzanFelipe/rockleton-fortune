@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+		Remove this if you use the .htaccess -->
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+		<!-- Template to allow user to choose between importing new transactions or replace existing -->
+		<title>index</title>
+		<meta name="description" content="">
+		<meta name="author" content="Ed Rogers">
+
+		<meta name="viewport" content="width=device-width; initial-scale=1.0">
+
+		<!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
+		<link rel="shortcut icon" href="/favicon.ico">
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+		<style>
+			table, th, td {
+    			border: 1px solid black;
+    			border-collapse: collapse;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div>
+			<header>
+				<h1>Select transactions to import</h1>
+			</header>
+			<nav>
+				<p>
+					<a href = {% url 'index' %}>Summary</a><br>
+				</p>
+			</nav>
+
+			<div>
+				<!-- Show number of transactions found in import csv -->
+				{{ transaction_list|length }} transaction(s) found
+				
+				<form action="{% url 'transaction_import_input' %}" method="post">
+					{% csrf_token %}
+					
+					<!-- If no duplications found, show imported transactions at the top -->
+					<!-- Indicate new by value preceded by "ti" -->
+					{% for transaction in transaction_list_wip.new %}
+						<table>
+							<tr>
+								<th></th>
+								<th>Date</th>
+								<th>Description</th>
+								<th>Original Description</th>
+								<th>Amount</th>
+								<th>Transaction Type</th>
+								<th>Secondary Category</th>
+								<th>Source Account</th>
+							</tr>
+							<tr>
+								<td><input type="radio" name=transaction_{{ transaction.id }} value="ti_{{ transaction.id }}"  /></td>
+								<td>{{ transaction.transaction_date }}</td>
+								<td>{{ transaction.description }}</td>
+								<td>{{ transaction.original_description }}</td>
+								<td>${{ transaction.amount }}</td>
+								<td>{{ transaction.transaction_type }}</td>
+								<td>{{ transaction.secondary_category }}</td>
+								<td>{{ transaction.source }}</td>
+							</tr>
+						</table>
+						<p></p>
+					{% endfor %}
+
+					<!-- If duplications found, show imported transactions along with potential duplicates below -->
+					<!-- Indicate new by value preceded by "ti" -->
+					<!-- Indicate duplicate by value preceded by "t" -->
+					<!-- Transaction.0 holds the new transaction -->
+					<!-- Transaction.1 holds the existing transaction that is being replaced (if applicable) -->
+					{% for transaction in transaction_list_wip.dupe %}
+						<table>
+							<tr>
+								<th></th>
+								<th>Date</th>
+								<th>Description</th>
+								<th>Original Description</th>
+								<th>Amount</th>
+								<th>Transaction Type</th>
+								<th>Secondary Category</th>
+								<th>Source Account</th>
+							</tr>
+							<tr>
+								<td><input type="radio" name=transaction_{{ transaction.0.id }} value="ti_{{ transaction.0.id }}"  /></td>
+								<td>{{ transaction.0.transaction_date }}</td>
+								<td>{{ transaction.0.description }}</td>
+								<td>{{ transaction.0.original_description }}</td>
+								<td>${{ transaction.0.amount }}</td>
+								<td>{{ transaction.0.transaction_type }}</td>
+								<td>{{ transaction.0.secondary_category }}</td>
+								<td>{{ transaction.0.source }}</td>
+							</tr>
+							{% for dupe_transaction in transaction.1 %}
+								<tr>
+									<td><input type="radio" name=transaction_{{ transaction.0.id }} value="t_{{ dupe_transaction.id }}" /></td>
+									<td>{{ dupe_transaction.transaction_date }}</td>
+									<td>{{ dupe_transaction.description }}</td>
+									<td>{{ dupe_transaction.original_description }}</td>
+									<td>${{ dupe_transaction.amount }}</td>
+									<td>{{ dupe_transaction.transaction_type }}</td>
+									<td>{{ dupe_transaction.secondary_category }}</td>
+									<td>{{ dupe_transaction.source }}</td>
+								</tr>
+							{% endfor %}
+						</table>
+						<p></p>
+					{% endfor %}
+					<input type="submit" value="Submit Selections" />
+				</form>
+			</div>
+
+		</div>
+	</body>
+</html>

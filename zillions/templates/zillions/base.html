@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<!-- Base template -->
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+		Remove this if you use the .htaccess -->
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+
+		
+		<title>{% block title %}Zillions{% endblock %}</title>
+		<meta name="description" content="">
+		<meta name="author" content="Ed Rogers">
+
+		<meta name="viewport" content="width=device-width; initial-scale=1.0">
+		
+		{% block extra_head %}{% endblock %}
+
+		<link rel="shortcut icon" href="/zillions/media/images/favicon.png">
+		
+		<!-- Add to homescreen for Chrome on Android -->
+		<meta name="mobile-web-app-capable" content="yes">
+		<link rel="icon" sizes="192x192" href="/zillions/media/images/android-desktop.png">
+
+		<!-- Add to homescreen for Safari on iOS -->
+		<meta name="apple-mobile-web-app-capable" content="yes">
+		<meta name="apple-mobile-web-app-status-bar-style" content="black">
+		<meta name="apple-mobile-web-app-title" content="Zillions">
+		<link rel="apple-touch-icon-precomposed" href="/zillions/media/images/ios-desktop.png">
+
+    	<!-- Tile icon for Win8 (144x144 + tile color) -->
+    	<meta name="msapplication-TileImage" content="/zillions/media/images/touch/ms-touch-icon-144x144-precomposed.png">
+    	<meta name="msapplication-TileColor" content="#3372DF">
+
+		<!--
+		<link rel="stylesheet" href="https://storage.googleapis.com/code.getmdl.io/1.0.6/material.indigo-pink.min.css">
+		<script src="https://storage.googleapis.com/code.getmdl.io/1.0.6/material.min.js"></script>
+		-->
+		
+		<!-- Material Design Lite -->
+		<link rel="stylesheet" href="/zillions/media/mdl/material.min.css">
+		<script src="/zillions/media/mdl/material.min.js"></script>
+		
+		<!-- Material Design Icons and fonts -->
+		<link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+		<link href="https://fonts.googleapis.com/css?family=Roboto:regular,bold,italic,thin,light,bolditalic,black,medium&amp;lang=en" rel="stylesheet">
+
+	</head>
+
+	<body>
+		{% block content %}{% endblock %}
+	</body>
+</html>

@@ -1,0 +1,12 @@
+<form action="{% url 'transfer' %}" method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    {{ formset.management_form }}
+    {% for formclip in formset %}
+    	<br>--<br>
+    	{{ formclip.as_p }}
+    {% endfor %}
+    <input type="submit" value="Submit" />
+    
+  
+</form>

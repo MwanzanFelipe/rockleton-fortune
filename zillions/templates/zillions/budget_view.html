@@ -1,0 +1,309 @@
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        
+        <!-- Template to show weekly spend -->
+        <title>Budget View</title>
+        
+        <!-- Javascript libraries -->
+        <script src="/zillions/media/d3/d3.v3.min.js"></script>
+        <script src="/zillions/media/jquery/jquery.js"></script>
+    </head>
+    
+	<style>
+		.bar.positive {
+			fill: #216C2A;
+		}
+
+		.bar.negative {
+			fill: brown;
+		}
+
+		.line {
+			fill: none;
+			stroke: steelblue;
+			stroke-width: 1.5px;
+		}
+		
+		.axis path,
+		.axis line {
+			fill: none;
+			stroke: #000;
+			shape-rendering: crispEdges;
+		}
+
+		tr:nth-child(even) {background-color: #f2f2f2}
+
+	</style>
+
+	<body>
+	
+		<script>
+			// Get JSON for budget summary data using parameters which allow for start/end date, individual, and number of weeks over which to calculate the moving average
+			$.getJSON( "{% url 'q_budget_view_json' %}?startdate={{ startdate|date:"Ymd" }}&enddate={{ enddate|date:"Ymd" }}&individual={{ individual }}&moving_avg_weeks={{ moving_avg_weeks }}", function( data ) {
+				
+				$('#budget_table').append('<table></table>');
+				var table = $('#budget_table').children();
+				
+				// Assume if variable passed to the template is not 1, don't include certain titles in the header row'
+				surplus_text = "";
+				multiples_text = "";
+				current_flag_check = 1
+				if (current_flag_check = {{ current_week_flag }}) {
+					surplus_text = "<b>This Week's Surplus</b>"
+					multiples_text = "<b>Multiple of Budget</b>"
+				};
+				
+				// Table header row
+				table.append("<tr><th><b>Category</b></th><th><b>{{ moving_avg_weeks }}-Week % Remaining</b></th><th>" + surplus_text + "</th><th>" + multiples_text + "</th></tr>");
+				
+				// Dimension data
+				var margin = {top: 10, right: 10, bottom: 10, left: 10},
+				width = 100 - margin.left - margin.right,
+				height = 50 - margin.top - margin.bottom;
+				
+				// Dimensions: minimum and maximum value
+				var y = d3.scale.linear()
+		    		.domain([-100, 100])
+		    		.range([height,0])
+		    		.nice();
+		
+				// Iterate over every primary category bucket
+				$.each( Object.keys(data), function( bucket_key, bucket_val ) {
+					
+					// Show bucket name across all columns
+					table.append("<tr><td colspan=4><b>"+bucket_val+"</b></td></tr>");
+					
+					// Iterate over every primary category in bucket
+					$.each( Object.keys(data[bucket_val]), function( pc_key, pc_val ) {
+		
+						// Show primary category name
+						// Give graph column an id that you can point d3 to: bucket_key_[]_pc_key_[]
+						// Likewise, give surplus and multiple columns ids:
+						// bucket_key_[]_pc_key_[]_surplus
+						// bucket_key_[]_pc_key_[]_multiple
+						table.append("<tr><td><b>"+pc_val+"</b></td><td id=bucket_key_"+bucket_key+"_pc_key_"+pc_key+"></td><td id=bucket_key_"+bucket_key+"_pc_key_"+pc_key+"_surplus></td><td id=bucket_key_"+bucket_key+"_pc_key_"+pc_key +"_multiple></td></tr>");
+		
+						// Primary category weekly spend data held in this array
+						dataset = data[bucket_val][pc_val]["primary_category_data"];
+						
+						// Strip out just the %-remaining data into a list
+						var vals = []; 
+						for(var i = 0, size = dataset.length; i < size ; i++){
+							vals.push(dataset[i].pc_perc_remaining);
+						}
+						dataset = vals;
+		
+						// The input (domain) to the ordinal scale is some identifying data—such as a name or a unique id
+						// Use rangeRoundBands to divide the vertical space into bands for each bar and specify the amount of padding between bars
+		    			var x = d3.scale.ordinal()
+		    				.domain(d3.range({{ num_weeks }}))
+		    				.rangeRoundBands([0, width], .2);
+		    				
+		    			// Draw the svg in the appropriate column
+		    			// g element is used to group SVG shapes together
+		    			// transform attribute is used to specify one or more transformations on an element
+		    			// translate() function takes one or two values which specify the horizontal and vertical translation values
+		    			var svg = d3.select("#bucket_key_"+bucket_key+"_pc_key_"+pc_key).append("svg")
+		    				.attr("width", width + margin.left + margin.right)
+		    				.attr("height", height + margin.top + margin.bottom)
+		  					.append("g")
+		    				.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		    				
+		    			// color the rect based on value being negative or positive
+		    			// determine x/y position, height,width
+		    			// SVG rects are positioned (the x and y attributes) by their top-left corner and
+		    			// cannot have a negative width or height. So, we must use the x- and y-scales to
+		    			// compute the position of the top-left corner, depending on whether the associated
+		    			// value is positive or negative, hence the conditionals:
+		    			svg.selectAll(".bar")
+		    				.data(dataset)
+		  					.enter().append("rect")
+		    				.attr("class", function(d) { return d < 0 ? "bar negative" : "bar positive"; })
+		    				.attr("y", function(d) { return y(Math.max(0, d)); })
+		    				.attr("x", function(d, i) { return x(i); })
+		    				.attr("height", function(d) { return Math.abs(y(d) - y(0)); })
+		    				.attr("width", x.rangeBand());
+		    				
+		    			// Show x axis
+		    			// x1 assumed to be 0
+		    			// need to specify y1 and y2 to center in middle of y domain
+						svg.append("g")
+							.attr("class", "x axis")
+							.append("line")
+							.attr("y1", y(0))
+							.attr("y2", y(0))
+							.attr("x2", width);
+		    				
+						
+						// Primary category moving average data held in this array
+		    			linedata = data[bucket_val][pc_val]["primary_category_data"];
+		    			
+		    			// Strip out just the %-remaining moving average data into a list
+						var vals = []; 
+						for(var i = 0, size = linedata.length; i < size ; i++){
+							vals.push(linedata[i].pc_perc_remaining_moving_avg);
+						}
+						linedata = vals;
+						
+						// Draw line with endpoints at the middle of the bars (x.rangeBand()/2)
+						var line = d3.svg.line()
+							.x(function(d, i) { return x(i) + x.rangeBand()/2; })
+		    				.y(function(d) { return y(d); });
+						svg.append("path")
+							.attr("class", "line")
+							.attr("d", line(linedata));
+		
+						// If the time horizon includes the current week, show the multiples and surplus data 
+						if (current_flag_check = {{ current_week_flag }}) {
+							
+							//Get the data
+							multiple = data[bucket_val][pc_val]["pc_surplus_multiples_of_budget"];
+							total_surplus = data[bucket_val][pc_val]["pc_total_surplus"];
+							
+							// Populate the multiple data in the cell reserved for it
+							$("#bucket_key_"+bucket_key+"_pc_key_"+pc_key +"_multiple").text("$" + total_surplus + " = " + multiple + "x");
+			
+							// Define the margins for this horizontal bar
+							var margin_h = {top: 10, right: 10, bottom: 10, left: 10},
+							width_h = 200 - margin_h.left - margin_h.right,
+							height_h = 30 - margin_h.top - margin_h.bottom;
+							
+							// Define the dimensions
+							var x_h = d3.scale.linear()
+								.domain([-100, 100])
+								.range([width_h,0])
+								.nice();
+							
+							// Collect this weeks %-remaining amount
+							var vals = []; 
+							vals.push(data[bucket_val][pc_val]["pc_perc_remaining"]);
+							dataset = vals;
+		
+							// The input (domain) to the ordinal scale is some identifying data—such as a name or a unique id
+							// Use rangeRoundBands to divide the vertical space into bands for each bar and specify the amount of padding between bars
+		    				var y_h = d3.scale.ordinal()
+		    					.domain(d3.range(1))
+		    					.rangeRoundBands([0, height_h], .2);
+		    					
+		    				// Draw the svg in the appropriate column
+		    				// g element is used to group SVG shapes together
+		    				// transform attribute is used to specify one or more transformations on an element
+		    				// translate() function takes one or two values which specify the horizontal and vertical translation values
+		    				var svg_h = d3.select("#bucket_key_"+bucket_key+"_pc_key_"+pc_key+"_surplus").append("svg")
+		    					.attr("width", width_h + margin_h.left + margin_h.right)
+		    					.attr("height", height_h + margin_h.top + margin_h.bottom)
+		  						.append("g")
+		    					.attr("transform", "translate(" + margin_h.left + "," + margin_h.top + ")");
+		    					
+		    				// color the rect based on value being negative or positive
+		    				// determine x/y position, height,width
+		    				// SVG rects are positioned (the x and y attributes) by their top-left corner and
+		    				// cannot have a negative width or height. So, we must use the x- and y-scales to
+		    				// compute the position of the top-left corner, depending on whether the associated
+		    				// value is positive or negative, hence the conditionals:
+		    				svg_h.selectAll(".bar")
+		    					.data(dataset)
+		  						.enter().append("rect")
+		    					.attr("class", function(d) { return d < 0 ? "bar negative" : "bar positive"; })
+		    					.attr("x", function(d) { return x_h(Math.max(0, -d)); })
+		    					.attr("y", function(d, i) { return y_h(i); })
+		    					.attr("width", function(d) { return Math.abs(x_h(-d) - x_h(0)); })
+		    					.attr("height", y_h.rangeBand());
+		    					
+		    				// Show y axis
+		    				// y1 assumed to be 0
+		    				// need to specify x1 and x2 to center in middle of x domain
+							svg_h.append("g")
+								.attr("class", "y axis")
+								.append("line")
+								.attr("x1", x_h(0))
+								.attr("x2", x_h(0))
+								.attr("y2", height);
+							}
+							
+						// Iterate over each secondary category in the primary category
+						$.each( Object.keys(data[bucket_val][pc_val]["pc_secondary_category_data"]), function( sc_key, sc_val ) {
+							// Create containers for the weekly spend
+							// Block off the cells for total surplus and multiplier value. We don't show those for secondary categories
+							table.append("<tr><td>"+sc_val+"</td><td id=bucket_key_"+bucket_key+"_pc_key_"+pc_key+"_sc_key_"+sc_key+"></td><td colspan = 2></td></tr>");
+		
+							// Strip out just the %-remaining data into a list
+							dataset = data[bucket_val][pc_val]["pc_secondary_category_data"][sc_val];
+							var vals = []; 
+							for(var i = 0, size = dataset.length; i < size ; i++){
+								vals.push(dataset[i].sc_perc_remaining);
+							}
+							dataset = vals;
+						
+							// The input (domain) to the ordinal scale is some identifying data—such as a name or a unique id
+							// Use rangeRoundBands to divide the vertical space into bands for each bar and specify the amount of padding between bars
+			    			var x = d3.scale.ordinal()
+		    					.domain(d3.range({{ num_weeks }}))
+		    					.rangeRoundBands([0, width], .2);
+		    					
+		    				// Draw the svg in the appropriate column
+		    				// g element is used to group SVG shapes together
+		    				// transform attribute is used to specify one or more transformations on an element
+		    				// translate() function takes one or two values which specify the horizontal and vertical translation values
+		    				var svg = d3.select("#bucket_key_"+bucket_key+"_pc_key_"+pc_key+"_sc_key_"+sc_key).append("svg")
+		    					.attr("width", width + margin.left + margin.right)
+		    					.attr("height", height + margin.top + margin.bottom)
+			  					.append("g")
+		    					.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+		    					
+		    				// color the rect based on value being negative or positive
+		    				// determine x/y position, height,width
+		    				// SVG rects are positioned (the x and y attributes) by their top-left corner and
+		    				// cannot have a negative width or height. So, we must use the x- and y-scales to
+		    				// compute the position of the top-left corner, depending on whether the associated
+		    				// value is positive or negative, hence the conditionals:
+		    				svg.selectAll(".bar")
+		    					.data(dataset)
+		  						.enter().append("rect")
+		    					.attr("class", function(d) { return d < 0 ? "bar negative" : "bar positive"; })
+			    				.attr("y", function(d) { return y(Math.max(0, d)); })
+		    					.attr("x", function(d, i) { return x(i); })
+		    					.attr("height", function(d) { return Math.abs(y(d) - y(0)); })
+		    					.attr("width", x.rangeBand());
+		    					
+		    				// Primary category moving average data held in this array
+		    				linedata = data[bucket_val][pc_val]["pc_secondary_category_data"][sc_val];
+		
+		    			    // Strip out just the %-remaining moving average data into a list
+							var vals = []; 
+							for(var i = 0, size = linedata.length; i < size ; i++){
+								vals.push(linedata[i].sc_perc_remaining_moving_avg);
+							}
+							linedata = vals;
+							
+							// Draw line with endpoints at the middle of the bars (x.rangeBand()/2)
+							var line = d3.svg.line()
+								.x(function(d, i) { return x(i) + x.rangeBand()/2; })
+		    					.y(function(d) { return y(d); });
+							svg.append("path")
+								.attr("class", "line")
+								.attr("d", line(linedata));
+								
+						});
+					});
+				});
+			});
+		
+		</script>
+
+		Start Date: {{ startdate }}<br>
+		End Date: {{ enddate }}<br>
+		    
+		<div id="budget_table">
+			<!-- Container for d3 budget viz -->
+		</div>
+
+		
+		
+		
+		
+
+
+    </body>
+</html>

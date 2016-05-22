@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+		Remove this if you use the .htaccess -->
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+		<!-- Template to show list of transactions -->
+		<title>index</title>
+		<meta name="description" content="">
+		<meta name="author" content="Ed Rogers">
+
+		<meta name="viewport" content="width=device-width; initial-scale=1.0">
+
+		<!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
+		<link rel="shortcut icon" href="/favicon.ico">
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+		<style>
+			table, th, td {
+    			border: 1px solid black;
+    			border-collapse: collapse;
+			}
+			
+			tr:nth-child(even) {background-color: #f2f2f2}
+			
+			tr.flagged {background-color: #ffff00}
+			tr.flagged:hover {background-color: #cccc00}
+			tr:hover {background-color: #e6e6e6}
+			
+		</style>
+	</head>
+
+	<body>
+		<div>
+			<header>
+				<h1>Transaction List</h1>
+			</header>
+			
+			{% if user.first_name == "Ed" %}
+				<nav>
+					<p>
+						<a href = {% url 'index' %}>Home</a><br>
+						<a href = {% url 'AddTransactionView' %}>New Transaction</a><br>
+					</p>
+				</nav>
+	
+				<div>
+					{{ transaction_list|length }} transaction(s) found
+					<table>
+						<tr>
+							<th>Date</th>
+							<th>Description</th>
+							<th>Amount</th>
+							<th>Primary Category</th>
+							<th>Secondary Category</th>
+							<th>Source Account</th>
+							<th>Ed Percent</th>
+							<th>Julie Percent</th>
+							<th>Ed Amount</th>
+							<th>Julie Amount</th>
+							<th></th>
+						</tr>
+						{% for transaction in transaction_list %}
+							<!-- Flag row if applicable -->
+							{% if transaction.flagged == 1 %}
+								<tr class="flagged">
+							{% else %}
+								<tr>
+							{% endif %}
+								<td>{{ transaction.transaction_date }}</td>
+								<td>{{ transaction.description }}</td>
+								<td>${{ transaction.signed_amount }}</td>
+								<td>{{ transaction.primary_category }}</td>
+								<td>{{ transaction.secondary_category }}</td>
+								<td>{{ transaction.source_name }}</td>
+								<td>{{ transaction.ed_perc }}%</td>
+								<td>{{ transaction.julie_perc }}%</td>
+								<td>${{ transaction.ed_signed_amount }}</td>
+								<td>${{ transaction.julie_signed_amount }}</td>
+								<td><a href="{% url 'UpdateTransactionView' pk=transaction.transaction_id %}">edit</a></td>
+							</tr>
+						{% endfor %}
+					</table>
+				</div>
+			{% endif %}
+			
+			
+			{% if user.first_name == "Julie" %}
+				<nav>
+					<p>
+						<a href = {% url 'index' %}>Home</a><br>
+					</p>
+				</nav>
+	
+				<div>
+					{{ transaction_list|length }} transaction(s) found
+					<table>
+						<tr>
+							<th>Date</th>
+							<th>Description</th>
+							<th>Amount</th>
+							<th>Primary Category</th>
+							<th>Secondary Category</th>
+							<th>Source Account</th>
+							<th>Ed Percent</th>
+							<th>Julie Percent</th>
+							<th>Ed Amount</th>
+							<th>Julie Amount</th>
+						</tr>
+						{% for transaction in transaction_list %}
+							<!-- Flag row if applicable -->
+							{% if transaction.flagged == 1 %}
+								<tr class="flagged">
+							{% else %}
+								<tr>
+							{% endif %}
+								<td>{{ transaction.transaction_date }}</td>
+								<td>{{ transaction.description }}</td>
+								<td>${{ transaction.signed_amount }}</td>
+								<td>{{ transaction.primary_category }}</td>
+								<td>{{ transaction.secondary_category }}</td>
+								<td>{{ transaction.source_name }}</td>
+								<td>{{ transaction.ed_perc }}%</td>
+								<td>{{ transaction.julie_perc }}%</td>
+								<td>${{ transaction.ed_signed_amount }}</td>
+								<td>${{ transaction.julie_signed_amount }}</td>
+							</tr>
+						{% endfor %}
+					</table>
+				</div>
+			{% endif %}
+
+
+			<footer>
+				<p>
+				</p>
+			</footer>
+		</div>
+	</body>
+</html>
