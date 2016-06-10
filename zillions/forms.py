@@ -3,7 +3,7 @@ from django.forms.models import inlineformset_factory, modelformset_factory, Bas
 from django.forms.formsets import DELETION_FIELD_NAME
 from django.contrib.auth.models import User
 
-from rockletonfortune.models import Transaction, Primary_Category_Bucket, Primary_Category, Secondary_Category, Source_Category, Source, Budget, Rockleton
+from zillions.models import Transaction, Primary_Category_Bucket, Primary_Category, Secondary_Category, Source_Category, Source, Budget, Rockleton
 
 class TransactionForm(forms.ModelForm):
     class Meta:

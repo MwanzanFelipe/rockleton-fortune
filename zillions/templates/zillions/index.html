@@ -1,183 +1,177 @@
+{% extends "zillions/base.html" %}
 {% load rockleton_extras %}
 
-<!DOCTYPE html>
-<html lang="en">
-	<head>
-		<meta charset="utf-8">
 
-		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
-		Remove this if you use the .htaccess -->
-		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+{% block title %}{{ block.super }} - Index{% endblock %}
 
-		<!-- Template to show links to other Zillions views -->
-		<!-- In addition, show summary of budget. Surplus per primary category, balance per source, total Julie amount, and confirmation of reconciliation -->
-		<title>index</title>
-		<meta name="description" content="">
-		<meta name="author" content="Ed Rogers">
+{% block extra_head %}
 
-		<meta name="viewport" content="width=device-width; initial-scale=1.0">
+  <style>
 
-		<!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
-		<link rel="shortcut icon" href="/favicon.ico">
-		<link rel="apple-touch-icon" href="/apple-touch-icon.png">
-		<style>
-			table, th, td {
-    			border: 1px solid black;
-    			border-collapse: collapse;
-			}
-		</style>
-	</head>
+    .mdl-data-table {
+      width: 100%; }
 
-	<body>
-		<div>
-			<header>
-				<h1>Home</h1>
-			</header>
-			<nav>
-				<p>
-					<u>Home</u>
-				</p>
+    .mdl-data-table tbody tr {
+      
+      height: 24px; }
+      
+    .mdl-data-table td, .mdl-data-table th {
+      
+      padding: 0 18px 6px 18px; }
 
-			</nav>
+    .mdl-data-table td {
+      height: 24px;
+      padding-top: 6px; }
+
+    .mdl-data-table th {
+      height: 36px;
+      padding-bottom: 6px; }
+    
+  </style>
+  
+{% endblock %}
+
+{% block content %}
+
+  {% if user.first_name == "Ed" %}
+    <div class="mdl-grid">
+
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          <a href = {% url 'test' %}>Test View</a>
+        </div>
+      </div>
+
+      <!-- Show one-time only notification messages -->
+      {% if messages %}
+        <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--4dp">
+          <div class="mdl-card__supporting-text">
+            <ul class="messages">
+              {% for message in messages %}
+                <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+        </div>
+      {% endif %}
+
+      <!-- Show Flagged transactions -->
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          <b><a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}&flagged=1>{{ flagged|length }} {{ user.first_name }} transaction(s) flagged</a></b><br>
+          <b><a href = {% url 'transaction_list' %}?individual=julie&flagged=1>Check Julie transactions flagged</a></b>
+        </div>
+      </div>
+    
+      <!-- Confirm total reconciliation -->
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          Dollars to reconcile = ${{ reconciliation|floatformat:2 }}<br>
+          Last Updated: {{ last_updated }}<br>
+          Julie Total: ${{ julie_total|floatformat:2 }}
+        </div>			
+	  </div>
+	</div>
+	
+	<div class = "mdl-grid">
+
+      <!-- Show surplus per primary category -->
+      {% if test_cat_totals %}
+        <div class="mdl-cell mdl-cell--4-col">
+          {% for bucket, content in test_cat_totals.items %}
+            <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell mdl-cell--1-col">
+              <thead>
+                <tr>
+                  <th class="mdl-data-table__cell--non-numeric" colspan=2>{{ bucket }}</th>
+                </tr>
+              </thead>
+              {% for category, data in content.items %}
+                <tbody>
+                  <tr>
+                    <td class="mdl-data-table__cell--non-numeric">{{ category }}</td>
+                    <td>
+                      {% if data.total < 0 %}
+                        -${{ data.total|abs }}
+                      {% else %}
+                        ${{ data.total }}
+                      {% endif %}
+                    </td>
+                    <td>
+						<svg width="95" height="10">
+							<rect width="{{ data.bar_length }}%" height="60%" y="15%" x="{{ data.bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.3" />
+							<rect width="1%" height="100%" x="50%" style="fill:rgb(0,0,0)" />
+							<rect width="1%" height="100%" x="{{ data.positive_budget_bar }}%" style="fill:rgb(0,175,0)" />
+							<rect width="1%" height="100%" x="{{ data.negative_budget_bar }}%" style="fill:rgb(175,0,0)" />
+						</svg>
+                    </td>
+                  </tr>
+                </tbody>
+              {% endfor %}
+            </table>
+          {% endfor %}
+        </div>
+      {% endif %}
+				
+      <!-- Show balance per source -->
+      {% if source_totals %}
+        <div class="mdl-cell mdl-cell--3-col">
+          {% for category, content in source_totals.items %}
+            <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell">
+              <thead>
+                <tr>
+                  <th class="mdl-data-table__cell--non-numeric" colspan=2>{{ category }}</th>
+                </tr>
+              </thead>
+              {% for source, amount in content.items %}
+                <tbody>
+                  <tr>
+                    <td class="mdl-data-table__cell--non-numeric">{{ source }}</td>
+                    <td>
+                      {% if amount < 0 %}
+                        -${{ amount|abs }}
+                      {% else %}
+                        ${{ amount }}
+                      {% endif %}
+                    </td>
+                  </tr>
+                </tbody>
+              {% endfor %}
+            </table>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+    </div>
+    
+    
+    
+  {% endif %}
 			
-			{% if user.first_name == "Ed" %}
-				<p>
-					<div>
-						User Anonymous? {{ user.is_anonymous }}<br>
-      					{% if user.is_anonymous %}
-							<a href="{% url 'login' %}?next=/zillions/">login</a>
-						{% else %}
-							Hello {{ user.first_name }}
-							<a href="{% url 'logout' %}?next=/zillions/">logout</a>
-						{% endif %}
-					</div><br>
-				</p>
-			
-				<!-- Show user-specific transactions -->
-				<a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}>{{ user.first_name }}'s Transactions</a><br>	
-			
-				<!-- Show Ed cuts -->
-				<a href = {% url 'transaction_list' %}?individual=julie>Julie's Transactions</a><br><br>
+  {% if user.first_name == "Julie" %}
+  
+    <div class="mdl-grid">
+      <!-- Confirm total reconciliation -->
+      <div class="mdl-cell mdl-cell--2-col mdl-card mdl-card--border mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          Last Updated: {{ last_updated }}<br>
+          Julie Total: ${{ julie_total|floatformat:2 }}
+        </div>
+      </div>	
+
 				
-				<a href = {% url 'transaction_list' %}?source=Chase>Chase Transactions</a><br>
-				<a href = {% url 'transaction_list' %}?source=Citi>Citi Transactions</a><br><br>
+      <!-- Show Julie-specific cuts -->
 				
-				<a href = {% url 'transaction_list' %}?primary=Bills%20%26%20Utilities>Bills & Utilities</a><br><br>
-				
-				<a href = {% url 'transaction_list' %}?source=BofA%20CC>BofA CC Transactions</a><br><br>
-				
-				<a href = {% url 'transaction_import_list' %}>Import Transactions</a><br>
-				<a href = {% url 'AddTransactionView' %}>New Transaction</a><br>
-				<a href = {% url 'transfer' %}>Transfer Funds</a><br>
-				
-				<a href = {% url 'export_csv' %}>Export Transactions</a><br>
-				
-				<a href = {% url 'budget_edit' %}>Edit Budget</a><br>
-				
-				<br>
-				<a href = {% url 'test' %}>Test View</a><br>
-				
-				<a href = {% url 'budget_view' %}?individual={{ user.first_name|lower }}>View {{ user.first_name }} Budget Totals</a><br>
-				
-				<!-- Show one-time only notification messages -->
-				{% if messages %}
-					<ul class="messages">
-	    				{% for message in messages %}
-	    					<li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
-	    				{% endfor %}
-					</ul>
-				{% endif %}<br>
-				
-				<!-- Show Flagged transactions -->
-				<b><a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}&flagged=1>{{ flagged|length }} {{ user.first_name }} transaction(s) flagged</a></b><br>
-				<b><a href = {% url 'transaction_list' %}?individual=julie&flagged=1>Check Julie transactions flagged</a></b>
-				<br><br>
-				<!-- Confirm total reconciliation -->
-				<div>
-					Dollars to reconcile = ${{ reconciliation|floatformat:2 }}
-				</div>	
-				
-				Last Updated: {{ last_updated }}<br>
-				Julie Total: ${{ julie_total|floatformat:2 }}
-				<!-- Show surplus per primary category -->
-				{% if category_totals %}
-					<table>
-					{% for bucket, content in category_totals.items %}
-						<tr>
-							<th colspan=2>{{ bucket }}</th>
-						</tr>
-						{% for category, amount in content.items %}
-							<tr>
-								<td>{{ category }}</td>
-								<td>
-									{% if amount < 0 %}
-										-${{ amount|abs }}
-									{% else %}
-										${{ amount }}
-									{% endif %}
-								</td>
-							</tr>
-						{% endfor %}
-					{% endfor %}
-					</table>
-				{% endif %}
-				
-				<div>
-					<!-- Show balance per source -->
-					{% if source_totals %}
-						<table>
-						{% for category, content in source_totals.items %}
-							<tr>
-								<th colspan=2>{{ category }}</th>
-							</tr>
-							{% for source, amount in content.items %}
-								<tr>
-									<td>{{ source }}</td>
-									<td>
-										{% if amount < 0 %}
-											-${{ amount|abs }}
-										{% else %}
-											${{ amount }}
-										{% endif %}
-									</td>
-								</tr>
-							{% endfor %}
-						{% endfor %}
-						</table>
-					{% endif %}
-				</div>
-			{% endif %}
-			
-			{% if user.first_name == "Julie" %}
-				<p>
-					<div>
-      					{% if user.is_anonymous %}
-							<a href="{% url 'login' %}?next=/zillions/">login</a>
-						{% else %}
-							Hello {{ user.first_name }}
-							<a href="{% url 'logout' %}?next=/zillions/">logout</a>
-						{% endif %}
-					</div><br>
-				</p>
-			
-				<b>
-					Last Updated: {{ last_updated }}<br>
-					Julie Total: ${{ julie_total|floatformat:2 }}
-				</b><br><br>
-			
-				<!-- Show user-specific transactions -->
-				<a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}>{{ user.first_name }}'s Transactions</a><br>
-				
-				<!-- Show Julie-specific cuts -->
-				
-				<!-- Show Flagged transactions -->
-				<b><a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}&flagged=1>{{ flagged|length }} {{ user.first_name }} transaction(s) flagged</a></b><br>
-			{% endif %}
+      <!-- Show Flagged transactions -->
+      <div class="mdl-cell mdl-cell--2-col mdl-card mdl-card--border mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          <b><a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}&flagged=1>{{ flagged|length }} {{ user.first_name }} transaction(s) flagged</a></b>
+        </div>
+      </div>
+
+    </div>
+    		
+  {% endif %}
 
 
-			<footer>
 
-			</footer>
-		</div>
-	</body>
-</html>
+{% endblock %}

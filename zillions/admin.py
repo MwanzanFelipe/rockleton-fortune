@@ -3,7 +3,7 @@ Created on Aug 17, 2015
 
 @author: edrogers
 '''
-from rockletonfortune.models import *
+from zillions.models import *
 from django.contrib import admin
 
 class TransactionAdmin(admin.ModelAdmin):

@@ -1,7 +1,7 @@
 from django.conf.urls import *
 from . import views
 from . import z_queries
-from zillions import settings
+from rockletonfortune import settings
 
 from django.contrib.auth.views import login, logout
 from django.contrib.auth.decorators import login_required
@@ -12,6 +12,7 @@ from django.db import models
 
 from .views import *
 from .z_queries import *
+
 
 urlpatterns = [
     # Show index page
@@ -45,7 +46,7 @@ urlpatterns = [
     url(r'budget/$', login_required(views.budget_view), name = 'budget_view'),
     
     # Media root for js libraries (d3, jquery, css, etc.)
-    url(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
+    #url(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
     
     
     # Test Area

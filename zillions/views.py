@@ -13,7 +13,7 @@ from django.shortcuts import render_to_response, get_object_or_404, redirect
 
 from django.views.generic import CreateView, UpdateView
 
-from rockletonfortune.models import Transaction, Primary_Category_Bucket, Primary_Category, Secondary_Category, Source_Category, Source, Budget, Transaction_Import
+from zillions.models import Transaction, Primary_Category_Bucket, Primary_Category, Secondary_Category, Source_Category, Source, Budget, Transaction_Import
 
 from .forms import *
 from .z_queries import *
@@ -44,6 +44,8 @@ def index(request):
     #Get Julie Total
     julie_total = q_julie_total()
     
+    test_cat_totals = q_budget_summary_json()
+    
     #Flagged Count
     flagged = q_transaction_list(primary = None, 
                                        secondary = None,
@@ -58,14 +60,15 @@ def index(request):
                                        incl_internal_transfer = None,
                                        flagged = 1)
 
-    template = loader.get_template('index.html')
+    template = loader.get_template('zillions/index.html')
     context = RequestContext(request, {
         'category_totals' : category_totals,
         'source_totals' : source_totals,
         'reconciliation' : reconciliation,
         'last_updated' : last_updated,
         'julie_total' : julie_total,
-        'flagged' : flagged
+        'flagged' : flagged,
+        'test_cat_totals' : test_cat_totals
     })
     return HttpResponse(template.render(context))
 
@@ -153,8 +156,8 @@ def import_transactions(request):
             transaction_list, transaction_list_wip = handle_selected_file(request.FILES['file'])
             #Pass the list of possible duplicates to the next function via session
             request.session['transaction_list'] = transaction_list_wip
-            
-            template = loader.get_template('transaction_import.html')
+
+            template = loader.get_template('zillions/transaction_import.html')
 
             context = RequestContext(request, {
                 'transaction_list' : transaction_list,
@@ -164,7 +167,7 @@ def import_transactions(request):
             return HttpResponse(template.render(context))
     else:
         form = SelectFileForm()
-    template = loader.get_template('selectfile.html')
+    template = loader.get_template('zillions/selectfile.html')
     context = RequestContext(request, {'form': form})
     return HttpResponse(template.render(context))
 
@@ -216,8 +219,9 @@ def handle_selected_file(f):
                 transaction.transaction_type = line[4]
                 transaction.secondary_category = str(line[5])
                 transaction.source = str(line[6])
-            
+                
                 transaction.save()
+
         i+=1 
         
 
@@ -301,7 +305,7 @@ def import_transaction_input(request):
     # Save the final import transactions to session 
     request.session['new_transactions'] = new_transactions_wip
     
-    template = loader.get_template('transaction_import_input.html')
+    template = loader.get_template('zillions/transaction_import_input.html')
     context = RequestContext(request, {
         'new_transactions' : new_transactions, 
         'new_transactions_wip' : new_transactions_wip
@@ -529,7 +533,7 @@ def transaction_list(request):
                                        incl_internal_transfer,
                                        flagged)
     
-    template = loader.get_template('transaction_list.html')
+    template = loader.get_template('zillions/transaction_list.html')
     context = RequestContext(request, {
         'transaction_list' : transaction_list
     })
@@ -537,7 +541,7 @@ def transaction_list(request):
 
 
 class AddTransactionView(CreateView):
-    template_name = 'edit_transaction.html'
+    template_name = 'zillions/edit_transaction.html'
     form_class = TransactionForm
 
     def get_context_data(self, **kwargs):
@@ -555,7 +559,7 @@ class AddTransactionView(CreateView):
 class UpdateTransactionView(UpdateView):
 
     model = Transaction
-    template_name = 'edit_transaction.html'
+    template_name = 'zillions/edit_transaction.html'
     fields = '__all__'
 
     success_url = '/zillions/'
@@ -731,7 +735,7 @@ def budget_edit(request):
     else:
         budget_universe = create_budget_universe(None, None)
 
-    template = loader.get_template('budget_edit.html')
+    template = loader.get_template('zillions/budget_edit.html')
     context = RequestContext(request, {'budget_universe': budget_universe})
     return HttpResponse(template.render(context))
 
@@ -775,7 +779,7 @@ def budget_view(request):
     delta = enddate - startdate
     num_weeks = (delta.days + 1) / 7
     
-    template = loader.get_template('budget_view.html')
+    template = loader.get_template('zillions/budget_view.html')
     context = RequestContext(request, {
         'startdate' : startdate,
         'enddate' : enddate,
@@ -783,16 +787,6 @@ def budget_view(request):
         'current_week_flag' : current_week_flag,
         'num_weeks' : num_weeks,
         'moving_avg_weeks' : moving_avg_weeks
-    })
-    return HttpResponse(template.render(context))
-
-# Test Area
-
-def testview(request, variable="here"):
-    test = variable
-    template = loader.get_template('test_template.html')
-    context = RequestContext(request, {
-        'test': test
     })
     return HttpResponse(template.render(context))
 
@@ -845,7 +839,17 @@ def transfer_amount(request):
 
 
 
-    template = loader.get_template('transfer.html')
+    template = loader.get_template('zillions/transfer.html')
     context = RequestContext(request, {'formset': TransferFormSet(), 'form':BaseTransferForm})
     return HttpResponse(template.render(context))
 
+# Test Area
+
+def testview(request, variable="here"):
+    test = variable
+    cat_tot = q_budget_summary_json()
+    template = loader.get_template('zillions/test2.html')
+    context = RequestContext(request, {
+        'test': test
+    })
+    return HttpResponse(template.render(context))
