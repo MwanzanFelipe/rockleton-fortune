@@ -30,6 +30,8 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/1.8/howto/deployment/checklist/
 
@@ -53,7 +55,10 @@ INSTALLED_APPS = (
     'django.contrib.staticfiles',
     'polls',
     'zillions',
+    'debug_toolbar',
 )
+
+LOGIN_URL = '/zillions/login/'
 
 MIDDLEWARE_CLASSES = (
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -98,21 +103,34 @@ if os.getenv('SERVER_SOFTWARE', '').startswith('Google App Engine'):
         'default': {
             'ENGINE': 'django.db.backends.mysql',
             'HOST': '/cloudsql/rockletonfortune:rockletonfortune-instance',
-            'NAME': 'zillionstemp',
+            'NAME': 'rockletonfortune',
             'USER': 'root',
         }
     }
 else:
+    """
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.mysql',
-            'NAME': 'zillionstemp',
+            'NAME': 'rockletonfortune',
             'USER': 'ed',
             'PASSWORD': 'ciaran',
-            'HOST': '207.223.163.122',
+            'HOST': '207.223.165.188',
             'PORT': '3306',
         }
     }
+    """
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.mysql',
+            'NAME': 'rockletonfortune',
+            'USER': 'root',
+            'PASSWORD': '',
+            'HOST': '',
+            'PORT': '',
+        }
+    }
+    
 # [END db_setup]
 
 # Internationalization
@@ -132,5 +150,12 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/1.8/howto/static-files/
 
-STATIC_ROOT='static'
+STATIC_ROOT='staticfiles'
 STATIC_URL = '/static/'
+
+
+#STATICFILES_DIRS = (
+#    os.path.join(BASE_DIR, 'static'),
+#)
+
+SESSION_SERIALIZER = 'django.contrib.sessions.serializers.PickleSerializer'

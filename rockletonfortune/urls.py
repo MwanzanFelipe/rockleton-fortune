@@ -15,9 +15,14 @@
 from django.conf.urls import include, url
 from django.contrib import admin
 
-from polls.views import index
+from django.contrib.auth.decorators import login_required
+
+#from polls.views import index
+from zillions import views
 
 urlpatterns = [
-    url(r'^$', index),
+    #url(r'^$', index),
+    url(r'^zillions/', include('zillions.urls')),
+    #url(r'^$', login_required(views.index), name='index'),
     url(r'^admin/', include(admin.site.urls)),
 ]
