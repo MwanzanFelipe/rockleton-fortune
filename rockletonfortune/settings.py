@@ -40,17 +40,8 @@ SECRET_KEY = '-c&qt=71oi^e5s8(ene*$b89^#%*0xeve$x_trs91veok9#0h0'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
-INTERNAL_IPS = (
-    '127.0.0.1',
-    '::1'
-)
-def show_toolbar(request):
-    return True
-SHOW_TOOLBAR_CALLBACK = show_toolbar
+INTERNAL_IPS = ('207.198.106.102', '127.0.0.1','207.223.165.188')
 
-DEBUG_TOOLBAR_CONFIG = {
-    'INTERCEPT_REDIRECTS': False,
-}
 
 
 ALLOWED_HOSTS = []
