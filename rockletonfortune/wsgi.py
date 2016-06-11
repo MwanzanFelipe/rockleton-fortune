@@ -29,3 +29,4 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "rockletonfortune.settings")
 
 #application = Cling(get_wsgi_application())
 application = get_wsgi_application()
+
