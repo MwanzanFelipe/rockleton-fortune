@@ -40,6 +40,8 @@ SECRET_KEY = '-c&qt=71oi^e5s8(ene*$b89^#%*0xeve$x_trs91veok9#0h0'
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
+INTERNAL_IPS = ('207.198.106.102', '127.0.0.1',)
+
 
 ALLOWED_HOSTS = []
 
