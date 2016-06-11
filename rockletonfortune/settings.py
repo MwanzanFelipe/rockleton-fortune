@@ -44,6 +44,13 @@ INTERNAL_IPS = (
     '127.0.0.1',
     '::1'
 )
+def show_toolbar(request):
+    return True
+SHOW_TOOLBAR_CALLBACK = show_toolbar
+
+DEBUG_TOOLBAR_CONFIG = {
+    'INTERCEPT_REDIRECTS': False,
+}
 
 
 ALLOWED_HOSTS = []
