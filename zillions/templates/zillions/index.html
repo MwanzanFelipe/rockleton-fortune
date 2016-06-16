@@ -26,6 +26,12 @@
     .mdl-data-table th {
       height: 36px;
       padding-bottom: 6px; }
+      
+    .index-surplus-summary-table {
+      width: 425px; }
+      
+    .index-account-summary-table {
+      width: 240px; }
     
   </style>
   
@@ -77,7 +83,7 @@
 
       <!-- Show surplus per primary category -->
       {% if test_cat_totals %}
-        <div class="mdl-cell mdl-cell--4-col">
+        <div class="mdl-cell mdl-cell--4-col index-surplus-summary-table">
           {% for bucket, content in test_cat_totals.items %}
             <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell mdl-cell--1-col">
               <thead>
@@ -114,7 +120,7 @@
 				
       <!-- Show balance per source -->
       {% if source_totals %}
-        <div class="mdl-cell mdl-cell--3-col">
+        <div class="mdl-cell mdl-cell--3-col  index-account-summary-table">
           {% for category, content in source_totals.items %}
             <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell">
               <thead>
@@ -174,4 +180,10 @@
 
 
 
+{% endblock %}
+
+{% block extra_body %}
+  {% if user.first_name == "Ed" %}
+    <a href="https://github.com/google/material-design-lite/blob/master/templates/dashboard/" target="_blank" id="view-source" class="mdl-button mdl-js-button mdl-button--raised mdl-js-ripple-effect mdl-button--colored mdl-color-text--white">View Source</a>
+  {% endif %}
 {% endblock %}
