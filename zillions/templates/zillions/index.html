@@ -10,6 +10,10 @@
 
     .mdl-data-table {
       width: 100%; }
+      
+	.mdl-data-table a {
+	  color:rgba(0,0,0,.87);
+	  font-weight: normal; }
 
     .mdl-data-table tbody tr {
       
@@ -28,7 +32,7 @@
       padding-bottom: 6px; }
       
     .index-surplus-summary-table {
-      width: 425px; }
+      width: 625px; }
       
     .index-account-summary-table {
       width: 240px; }
@@ -40,6 +44,11 @@
 {% block content %}
 
   {% if user.first_name == "Ed" %}
+  	<style>
+  	  .index-surplus-summary-table {
+      width: 625px; }
+  	</style>
+  	
     <div class="mdl-grid">
 
       <div class="mdl-cell mdl-cell--3-col mdl-card mdl-shadow--2dp">
@@ -74,7 +83,7 @@
         <div class="mdl-card__supporting-text">
           Dollars to reconcile = ${{ reconciliation|floatformat:2 }}<br>
           Last Updated: {{ last_updated }}<br>
-          Julie Total: ${{ julie_total|floatformat:2 }}
+          Julie Grand Total: ${{ julie_total|floatformat:2 }}
         </div>			
 	  </div>
 	</div>
@@ -88,13 +97,13 @@
             <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell mdl-cell--1-col">
               <thead>
                 <tr>
-                  <th class="mdl-data-table__cell--non-numeric" colspan=2>{{ bucket }}</th>
+                  <th class="mdl-data-table__cell--non-numeric" colspan=4>{{ bucket }}</th>
                 </tr>
               </thead>
               {% for category, data in content.items %}
                 <tbody>
                   <tr>
-                    <td class="mdl-data-table__cell--non-numeric">{{ category }}</td>
+                    <td class="mdl-data-table__cell--non-numeric"><a href={% url 'transaction_list' %}?individual={{ user.first_name|lower }}&primary={{ category|urlname }}>{{ category }}</td>
                     <td>
                       {% if data.total < 0 %}
                         -${{ data.total|abs }}
@@ -102,14 +111,41 @@
                         ${{ data.total }}
                       {% endif %}
                     </td>
-                    <td>
-						<svg width="95" height="10">
-							<rect width="{{ data.bar_length }}%" height="60%" y="15%" x="{{ data.bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.3" />
-							<rect width="1%" height="100%" x="50%" style="fill:rgb(0,0,0)" />
-							<rect width="1%" height="100%" x="{{ data.positive_budget_bar }}%" style="fill:rgb(0,175,0)" />
-							<rect width="1%" height="100%" x="{{ data.negative_budget_bar }}%" style="fill:rgb(175,0,0)" />
-						</svg>
-                    </td>
+                    {% if bucket = "Budgeted" %}
+	                    <td>
+							<svg width="95" height="10">
+								
+								<rect width="{{ data.nn_bar_length }}%" height="60%" y="15%" x="{{ data.nn_bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.n_bar_length }}%" height="60%" y="15%" x="{{ data.n_bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.3" />
+								<rect width="{{ data.pp_bar_length }}%" height="60%" y="15%" x="{{ data.pp_bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.p_bar_length }}%" height="60%" y="15%" x="{{ data.p_bar_start }}%" style="fill:{{ data.bar_color }};fill-opacity:0.3" />
+								<rect width="1%" height="100%" x="50%" style="fill:rgb(0,0,0)" />
+								<rect width="1%" height="100%" x="{{ data.positive_budget_bar }}%" style="fill:rgb(0,175,0)" />
+								<rect width="1%" height="100%" x="{{ data.negative_budget_bar }}%" style="fill:rgb(175,0,0)" />
+							</svg>
+	                    </td>
+	                    <td>
+	                      {% if data.cw_total < 0 %}
+	                        -${{ data.cw_total|abs }}
+	                      {% else %}
+	                        ${{ data.cw_total }}
+	                      {% endif %}
+	                    </td>
+	                    <td>
+							<svg width="95" height="10">
+								
+								<rect width="{{ data.cw_nn_bar_length }}%" height="60%" y="15%" x="{{ data.cw_nn_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.cw_n_bar_length }}%" height="60%" y="15%" x="{{ data.cw_n_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.3" />
+								<rect width="{{ data.cw_pp_bar_length }}%" height="60%" y="15%" x="{{ data.cw_pp_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.cw_p_bar_length }}%" height="60%" y="15%" x="{{ data.cw_p_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.3" />
+								<rect width="1%" height="100%" x="50%" style="fill:rgb(0,0,0)" />
+								<rect width="1%" height="100%" x="{{ data.cw_positive_budget_bar }}%" style="fill:rgb(0,175,0)" />
+								<rect width="1%" height="100%" x="{{ data.cw_negative_budget_bar }}%" style="fill:rgb(175,0,0)" />
+							</svg>
+	                    </td>
+		            {% else %}
+		              <td colspan=3></td>
+		            {% endif %}
                   </tr>
                 </tbody>
               {% endfor %}
@@ -131,7 +167,7 @@
               {% for source, amount in content.items %}
                 <tbody>
                   <tr>
-                    <td class="mdl-data-table__cell--non-numeric">{{ source }}</td>
+                    <td class="mdl-data-table__cell--non-numeric"><a href={% url 'transaction_list' %}?individual={{ user.first_name|lower }}&source={{ source|urlname }}>{{ source }}</a></td>
                     <td>
                       {% if amount < 0 %}
                         -${{ amount|abs }}
@@ -155,12 +191,18 @@
 			
   {% if user.first_name == "Julie" %}
   
+  	<style>
+  	  .index-surplus-summary-table {
+      width: 405px; }
+  	</style>
+  
     <div class="mdl-grid">
       <!-- Confirm total reconciliation -->
-      <div class="mdl-cell mdl-cell--2-col mdl-card mdl-card--border mdl-shadow--2dp">
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
         <div class="mdl-card__supporting-text">
-          Last Updated: {{ last_updated }}<br>
-          Julie Total: ${{ julie_total|floatformat:2 }}
+          <b>Last Updated: {{ last_updated }}</b><br><br>
+          Julie Grand Total: ${{ julie_total|floatformat:2 }}<br>
+          Amortization Total: ${{ julie_amortization_total }}
         </div>
       </div>	
 
@@ -168,13 +210,109 @@
       <!-- Show Julie-specific cuts -->
 				
       <!-- Show Flagged transactions -->
-      <div class="mdl-cell mdl-cell--2-col mdl-card mdl-card--border mdl-shadow--2dp">
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
         <div class="mdl-card__supporting-text">
           <b><a href = {% url 'transaction_list' %}?individual={{ user.first_name|lower }}&flagged=1>{{ flagged|length }} {{ user.first_name }} transaction(s) flagged</a></b>
         </div>
       </div>
+      
+      <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
+        <div class="mdl-card__supporting-text">
+          <b>Budget Totals</b><br>
+          Wedding Fund: ${{ wedding_total }}<br>
+          Moving Account: ${{ moving_account_total }}<br>
+        </div>
+      </div>	
 
     </div>
+    
+	<div class = "mdl-grid">
+
+      <!-- Show surplus per primary category -->
+      {% if test_cat_totals %}
+        <div class="mdl-cell mdl-cell--4-col index-surplus-summary-table">
+          {% for bucket, content in test_cat_totals.items %}
+            <table class="mdl-data-table mdl-js-data-table mdl-shadow--2dp mdl-cell mdl-cell--1-col">
+              <thead>
+                <tr>
+                  <th class="mdl-data-table__cell--non-numeric" colspan=3>{{ bucket }}</th>
+                </tr>
+                <tr>
+                  <th class="mdl-data-table__cell--non-numeric">Category Name</th>
+                  <th class="mdl-data-table__cell--non-numeric" colspan=2>$ Remaining vs Budget</th>
+                </tr>
+              </thead>
+              {% for category, data in content.items %}
+                <tbody>
+                  <tr>
+                    <td class="mdl-data-table__cell--non-numeric"><a href={% url 'transaction_list' %}?individual={{ user.first_name|lower }}&primary={{ category|urlname }}>{{ category }}</td>
+                    <td>
+                      {% if data.cw_total < 0 %}
+                        -${{ data.cw_total|abs }}
+                      {% else %}
+                        ${{ data.cw_total }}
+                      {% endif %}
+                    </td>
+                    {% if bucket = "Budgeted" %}
+	                    <td>
+							<svg width="95" height="10">
+								
+								<rect width="{{ data.cw_nn_bar_length }}%" height="60%" y="15%" x="{{ data.cw_nn_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.cw_n_bar_length }}%" height="60%" y="15%" x="{{ data.cw_n_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.3" />
+								<rect width="{{ data.cw_pp_bar_length }}%" height="60%" y="15%" x="{{ data.cw_pp_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.7" />
+								<rect width="{{ data.cw_p_bar_length }}%" height="60%" y="15%" x="{{ data.cw_p_bar_start }}%" style="fill:{{ data.cw_bar_color }};fill-opacity:0.3" />
+								<rect width="1%" height="100%" x="50%" style="fill:rgb(0,0,0)" />
+								<rect width="1%" height="100%" x="{{ data.cw_positive_budget_bar }}%" style="fill:rgb(0,175,0)" />
+								<rect width="1%" height="100%" x="{{ data.cw_negative_budget_bar }}%" style="fill:rgb(175,0,0)" />
+							</svg>
+	                    </td>
+	                {% else %}
+	              		<td></td>
+	                {% endif %}
+                  </tr>
+                </tbody>
+              {% endfor %}
+            </table>
+          {% endfor %}
+        </div>
+      {% endif %}
+
+		<div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
+		  <div class="mdl-card__supporting-text">
+		    <b>New Features</b><br>
+		    <ul>
+		  	  <li>2016-06-26
+		  	    <ul>
+		  		  <li>New User Interface</li>
+		  		  <li>View of current week spend vs budget</li>
+		  		  <li>Date of last update</li>
+		  		  <li>Totals for Owed and Amortized</li>
+		  		  <li>Show totals for Wedding Fund and Moving Account</li>
+		  		  <li>Show flagged transactions</li>
+		  		  <li>Show all transactions</li>
+		  		  <li>Show specific filtered list of transactions</li>
+		  		  <li>Rockleton Fortune available online</li>
+		  		</ul>
+			  </li>
+		    </ul>
+		  </div>
+		</div>
+
+		<div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
+		  <div class="mdl-card__supporting-text">
+		    <b>Future Features</b><br>
+		    <ul>
+	  		  <li>Revised User Interface</li>
+	  		  <li>View of spend by category over time</li>
+	  		  <li>Savings Goals</li>
+	  		  <li>Alerts</li>
+	  		  <li>Feedback Button</li>
+	  		  <li>Ability to edit budget per category</li>
+		    </ul>
+		  </div>
+		</div>
+
+   </div>
     		
   {% endif %}
 

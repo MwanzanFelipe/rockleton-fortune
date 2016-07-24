@@ -40,6 +40,7 @@ class Primary_Category_Bucket(models.Model):
 class Primary_Category(models.Model):
     name = models.CharField("Category Name", max_length=30) 
     category = models.ForeignKey(Primary_Category_Bucket) 
+    show_julie = models.BooleanField(default=False)
     
     def __unicode__(self):
         return self.name

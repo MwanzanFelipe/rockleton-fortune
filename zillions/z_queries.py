@@ -1634,7 +1634,7 @@ def q_budget_view_json(request):
 
 #FUTURE
 #@csrf_exempt
-def q_budget_summary_json():
+def q_budget_summary_json(individual):
     #Double of q_ed_primary_buckets() to get extra data
     
     # I would prefer to make queries using django's terminology
@@ -1661,119 +1661,163 @@ def q_budget_summary_json():
     else:
         bucket_name = ''
         
-    drop_temp_table('pcb')
 
-    q_pcb = " \
-        SELECT \
-            * \
-        FROM \
-            zillions_primary_category_bucket \
-        %s" % bucket_name
+    q_pcb = """
+        SELECT
+            *
+        FROM
+            zillions_primary_category_bucket
+        %s""" % bucket_name
             
     if primary_names:
         primary_names = split_list(primary_names,'pc.name')
     else:
         primary_names = ''
     
+    ed_weight, julie_weight = erjs_weights(individual)
 
-    q_pc_pcb = " \
-        SELECT \
-            pc.id as primary_category_id \
-            , pc.name as primary_category \
-            , pcb.name as primary_category_bucket \
-        FROM \
-            zillions_primary_category pc \
-        INNER JOIN \
-            (%s) pcb \
-        ON \
-            pc.category_id = pcb.id \
-        %s" % (q_pcb, primary_names)
+    q_pc_pcb = """
+        SELECT
+            pc.id as primary_category_id
+            , pc.name as primary_category
+            , pcb.name as primary_category_bucket
+        FROM
+            (SELECT
+               *
+             FROM
+               zillions_primary_category
+             WHERE
+               show_julie = 1 OR show_julie = 1 * %s) pc
+        INNER JOIN
+            (%s) pcb
+        ON
+            pc.category_id = pcb.id
+        %s""" % (julie_weight, q_pcb, primary_names)
         
-    
     if secondary_names:
         secondary_names = split_list(secondary_names,'sc.name')
     else:
         secondary_names = ''
         
-    q_sc_pc_pcb = " \
-        SELECT \
-            sc.id as secondary_category_id \
-            , sc.name as secondary_category \
-            , pc_pcb.primary_category \
-            , pc_pcb.primary_category_id \
-            , pc_pcb.primary_category_bucket \
-        FROM \
-            zillions_secondary_category sc \
-        INNER JOIN \
-            (%s) pc_pcb \
-        ON \
-            sc.primary_category_id = pc_pcb.primary_category_id \
-        %s" % (q_pc_pcb, secondary_names)
+    q_sc_pc_pcb = """
+        SELECT
+            sc.id as secondary_category_id
+            , sc.name as secondary_category
+            , pc_pcb.primary_category
+            , pc_pcb.primary_category_id
+            , pc_pcb.primary_category_bucket
+        FROM
+            zillions_secondary_category sc
+        INNER JOIN
+            (%s) pc_pcb
+        ON
+            sc.primary_category_id = pc_pcb.primary_category_id
+        %s""" % (q_pc_pcb, secondary_names)
         
-    q_t_pc_pcb = " \
-        SELECT \
-            sc_pc_pcb.primary_category \
-            , sc_pc_pcb.primary_category_id \
-            , sc_pc_pcb.primary_category_bucket \
-            , round(sum(t.transaction_type * t.amount * t.ed_perc/100),2) as ed_signed_amount \
-        FROM \
-            zillions_transaction t \
-        INNER JOIN \
-            (%s) sc_pc_pcb \
-        ON \
-            t.secondary_category_id = sc_pc_pcb.secondary_category_id \
-        GROUP BY 1,2,3 \
-        " % (q_sc_pc_pcb)
+    #individual = 'ed'
     
-    individual = 'ed'
+        
+    q_t_pc_pcb = """
+        SELECT
+            sc_pc_pcb.primary_category
+            , sc_pc_pcb.primary_category_id
+            , sc_pc_pcb.primary_category_bucket
+            , round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1-t.ed_perc/100) * %s),2) as signed_amount
+        FROM
+            zillions_transaction t
+        INNER JOIN
+            (%s) sc_pc_pcb
+        ON
+            t.secondary_category_id = sc_pc_pcb.secondary_category_id
+        GROUP BY 1,2,3
+        """ % (ed_weight, julie_weight, q_sc_pc_pcb)
+        
+    dt = date.today()
+    first_day_of_current_week = dt - timedelta(days=(dt.weekday() + 1) % 7)
+        
+    q_t_pc_pcb_week = """ 
+        SELECT
+            primary_category
+            , primary_category_id
+            , primary_category_bucket
+            , CASE
+                WHEN cw_spend is null then 0
+                WHEN cw_spend is not null then cw_spend
+                END as cw_spend
+        FROM
+            (SELECT 
+                sc_pc_pcb.primary_category 
+                , sc_pc_pcb.primary_category_id 
+                , sc_pc_pcb.primary_category_bucket 
+                , round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1 - t.ed_perc/100) * %s),2) as cw_spend 
+            FROM 
+                (SELECT 
+                   *
+                 FROM
+                   zillions_transaction
+                 WHERE
+                   transaction_date >= '%s'
+                   AND internal_transfer = 0) t 
+            RIGHT JOIN 
+                (%s) sc_pc_pcb 
+            ON 
+                t.secondary_category_id = sc_pc_pcb.secondary_category_id 
+            GROUP BY 1,2,3) tbl
+        """ % (ed_weight, julie_weight, first_day_of_current_week, q_sc_pc_pcb)
+
+    #print q_t_pc_pcb_week
     
-    ed_weight, julie_weight = erjs_weights(individual)
     rockleton_id = Rockleton.objects.filter(user__first_name__icontains=individual)[0].id
             
-    q_b_pc_pcb = " \
-        SELECT \
-            primary_category \
-            , primary_category_id \
-            , round(sum(sc_budgeted_amount),2) as pc_budgeted_amount \
-        FROM \
-            (SELECT \
-                 sc_pc_pcb.primary_category \
-                 , sc_pc_pcb.primary_category_id \
-                 , CASE \
-                     WHEN rb.amount is NULL then 0 \
-                     WHEN rb.time_period = 'WE' then (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s) \
-                     ELSE (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s) / 4 \
-                     END as sc_budgeted_amount \
-             FROM \
-                 (%s) sc_pc_pcb \
-             LEFT JOIN \
-                 (SELECT \
-                     * \
-                 FROM \
-                     zillions_budget \
-                 WHERE \
-                     user_id = %s) rb \
-             ON \
-                 sc_pc_pcb.secondary_category_id = rb.secondary_category_id) b_sc_pc_pcb \
-        GROUP BY 1,2 \
-        " % (ed_weight, julie_weight, ed_weight, julie_weight, q_sc_pc_pcb, rockleton_id)
+    q_b_pc_pcb = """
+        SELECT
+            primary_category
+            , primary_category_id
+            , round(sum(sc_budgeted_amount),2) as pc_budgeted_amount
+        FROM
+            (SELECT
+                 sc_pc_pcb.primary_category
+                 , sc_pc_pcb.primary_category_id
+                 , CASE
+                     WHEN rb.amount is NULL then 0
+                     WHEN rb.time_period = 'WE' then (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s)
+                     ELSE (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s) / 4
+                     END as sc_budgeted_amount
+             FROM
+                 (%s) sc_pc_pcb
+             LEFT JOIN
+                 (SELECT
+                     *
+                 FROM
+                     zillions_budget
+                 WHERE
+                     user_id = %s) rb
+             ON
+                 sc_pc_pcb.secondary_category_id = rb.secondary_category_id) b_sc_pc_pcb
+        GROUP BY 1,2
+        """ % (ed_weight, julie_weight, ed_weight, julie_weight, q_sc_pc_pcb, rockleton_id)
     
-    q_b_t_pc_pcb = " \
-        SELECT \
-            t_pc_pcb.primary_category \
-            , t_pc_pcb.primary_category_bucket \
-            , b_pc_pcb.pc_budgeted_amount \
-            , t_pc_pcb.ed_signed_amount \
-        FROM \
-            (%s) b_pc_pcb \
-        INNER JOIN \
-            (%s) t_pc_pcb \
-        ON \
-            b_pc_pcb.primary_category_id = t_pc_pcb.primary_category_id \
-        ;" % (q_b_pc_pcb, q_t_pc_pcb)
+    q_b_t_pc_pcb = """
+        SELECT
+            t_pc_pcb.primary_category
+            , t_pc_pcb.primary_category_bucket
+            , b_pc_pcb.pc_budgeted_amount
+            , t_pc_pcb.signed_amount
+            , t_pc_pcb_week.cw_spend + b_pc_pcb.pc_budgeted_amount as signed_amount_current_week
+        FROM
+            (%s) b_pc_pcb
+        INNER JOIN
+            (%s) t_pc_pcb
+        ON
+            b_pc_pcb.primary_category_id = t_pc_pcb.primary_category_id
+        INNER JOIN
+            (%s) t_pc_pcb_week
+        ON
+            b_pc_pcb.primary_category_id = t_pc_pcb_week.primary_category_id
+        ;""" % (q_b_pc_pcb, q_t_pc_pcb, q_t_pc_pcb_week)
         
-    print 
-            
+    #print q_b_t_pc_pcb
+    
     sql_tuple = execute_query(q_b_t_pc_pcb)
     
     category_totals = {}
@@ -1782,87 +1826,228 @@ def q_budget_summary_json():
         # If Primary Category Bucket has not been initialized, do so, otherwise just define a primary category "underneath" the bucket and enter the signed amount
         # FUTURE: DRY. Is there a way to check whether a bucket dictionary exists without using "try"? Then I don't have to repeat the same line twice
         try:
-            category_totals[str(category.primary_category_bucket)][str(category.primary_category)] = {}
-            category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["total"] = category.ed_signed_amount
-            
-            if category.pc_budgeted_amount == 0:
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
-                if category.ed_signed_amount >= 0:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(0,255,0)"
-                else:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(255,0,0)"
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 100
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-            else:
-                if category.ed_signed_amount >= 0:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 50
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(0,255,0)"
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-
-                    if category.ed_signed_amount >= category.pc_budgeted_amount:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = Decimal(category.pc_budgeted_amount/category.ed_signed_amount) * Decimal(50) + Decimal(50)
-                    else:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = Decimal(category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-                    
-                else:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(255,0,0)"
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-                    
-                    if category.ed_signed_amount <= -category.pc_budgeted_amount:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 50 - Decimal(-category.pc_budgeted_amount/category.ed_signed_amount) * Decimal(50)
-                    else:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50 - Decimal(-category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = Decimal(-category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-
-    
+            define_summary_json(category_totals, category)
         except:
+
             category_totals[str(category.primary_category_bucket)] = SortedDict()
             
-            category_totals[str(category.primary_category_bucket)][str(category.primary_category)] = {}
-            category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["total"] = category.ed_signed_amount
-            
-            if category.pc_budgeted_amount == 0:
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
-                if category.ed_signed_amount >= 0:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(0,255,0)"
-                else:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(255,0,0)"
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 100
-                category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-            else:
-                if category.ed_signed_amount >= 0:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 50
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(0,255,0)"
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-
-                    if category.ed_signed_amount >= category.pc_budgeted_amount:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = Decimal(category.pc_budgeted_amount/category.ed_signed_amount) * Decimal(50) + Decimal(50)
-                    else:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = Decimal(category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-                    
-                else:
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = "rgb(255,0,0)"
-                    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = 99
-                    
-                    if category.ed_signed_amount <= -category.pc_budgeted_amount:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 50 - Decimal(-category.pc_budgeted_amount/category.ed_signed_amount) * Decimal(50)
-                    else:
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50 - Decimal(-category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = Decimal(-category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
-                        category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = 0
-
-
+            define_summary_json(category_totals, category)
     #print category_totals
     
     return category_totals
+
+def define_summary_json(category_totals, category):
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)] = {}
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["total"] = category.signed_amount
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_total"] = category.signed_amount_current_week
+    
+    if category.pc_budgeted_amount == 0:
+        pragmatic_pc_budgeted_amount = 1
+    else:
+        pragmatic_pc_budgeted_amount = category.pc_budgeted_amount
+    
+    bar_params = get_bar_params(pragmatic_pc_budgeted_amount, category.signed_amount)
+
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = bar_params["bar_color"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = bar_params["negative_budget_bar"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["positive_budget_bar"] = bar_params["positive_budget_bar"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["p_bar_length"] = bar_params["p_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["p_bar_start"] = bar_params["p_bar_start"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["pp_bar_length"] = bar_params["pp_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["pp_bar_start"] = bar_params["pp_bar_start"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["n_bar_length"] = bar_params["n_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["n_bar_start"] = bar_params["n_bar_start"]
+
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["nn_bar_length"] = bar_params["nn_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["nn_bar_start"] = bar_params["nn_bar_start"]
+    
+    bar_params = get_bar_params(pragmatic_pc_budgeted_amount, category.signed_amount_current_week)
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_bar_color"] = bar_params["bar_color"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_negative_budget_bar"] = bar_params["negative_budget_bar"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_positive_budget_bar"] = bar_params["positive_budget_bar"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_p_bar_length"] = bar_params["p_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_p_bar_start"] = bar_params["p_bar_start"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_pp_bar_length"] = bar_params["pp_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_pp_bar_start"] = bar_params["pp_bar_start"]
+    
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_n_bar_length"] = bar_params["n_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_n_bar_start"] = bar_params["n_bar_start"]
+
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_nn_bar_length"] = bar_params["nn_bar_length"]
+    category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_nn_bar_start"] = bar_params["nn_bar_start"]
+
+
+    return category_totals
+
+def get_bar_params(budgeted_amount, signed_amount):
+    if budgeted_amount == 0:
+        # Deprecated
+        p_bar_start = 0
+        if signed_amount >= 0:
+            bar_color = "rgb(0,255,0)"
+        else:
+            bar_color = "rgb(255,0,0)"
+        negative_budget_bar = 0
+        p_bar_length = 100
+        positive_budget_bar = 99
+        
+        pp_bar_length = 0
+        pp_bar_start = 0
+        nn_bar_length = 0
+        nn_bar_start = 0
+        n_bar_length = 0
+        n_bar_start = 0
+    else:
+        if signed_amount >= 0:
+            p_bar_start = 50
+            bar_color = "rgb(0,255,0)"
+            negative_budget_bar = 0
+            
+            nn_bar_length = 0
+            nn_bar_start = 0
+            n_bar_length = 0
+            n_bar_start = 0
+
+            if signed_amount >= budgeted_amount:
+                positive_budget_bar = Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
+                p_bar_length = Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
+                pp_bar_length = 49 - Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
+                pp_bar_start = p_bar_length
+            else:
+                #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = Decimal(category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
+                positive_budget_bar = 99 
+                p_bar_length = Decimal(signed_amount/budgeted_amount) * Decimal(49)
+            
+                pp_bar_length = 0
+                pp_bar_start = 0
+
+            
+        else:
+            bar_color = "rgb(255,0,0)"
+            positive_budget_bar = 99
+            
+            p_bar_start = 0
+            p_bar_length = 0
+            pp_bar_length = 0
+            pp_bar_start = 0
+            
+            if signed_amount <= -budgeted_amount:
+                #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
+                #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
+                negative_budget_bar = 50 - Decimal(-budgeted_amount/signed_amount) * Decimal(50)
+                nn_bar_length = 50 - Decimal(-budgeted_amount/signed_amount) * Decimal(50)
+                nn_bar_start = 0
+                n_bar_length = Decimal(-budgeted_amount/signed_amount) * Decimal(50)
+                n_bar_start = nn_bar_length
+            else:
+                n_bar_length = Decimal(-signed_amount/budgeted_amount) * Decimal(50)
+                n_bar_start = 50 - Decimal(-signed_amount/budgeted_amount) * Decimal(50)
+                negative_budget_bar = 0
+                
+                nn_bar_length = 0
+                nn_bar_start = 0
+
+    bar_params = {
+        'p_bar_start' : p_bar_start
+        , 'bar_color' : bar_color
+        , 'negative_budget_bar' : negative_budget_bar
+        , 'p_bar_length' : p_bar_length
+        , 'positive_budget_bar' : positive_budget_bar
+        , 'pp_bar_length' : pp_bar_length
+        , 'pp_bar_start' : pp_bar_start
+        , 'nn_bar_length' : nn_bar_length
+        , 'nn_bar_start' : nn_bar_start
+        , 'n_bar_length' : n_bar_length
+        , 'n_bar_start' : n_bar_start
+    }
+
+
+    return bar_params
+
+def q_ed_pc_total(primary_names, individual):
+    
+    bucket_name = None
+    secondary_names = None
+    
+    if bucket_name is not None:
+        bucket_name = split_list(bucket_name,'name')
+    else:
+        bucket_name = ''
+    
+    q_pcb = """
+        SELECT
+            *
+        FROM
+            zillions_primary_category_bucket
+        %s""" % bucket_name
+            
+    if primary_names:
+        primary_names = split_list(primary_names,'pc.name')
+    else:
+        primary_names = ''
+    
+    ed_weight, julie_weight = erjs_weights(individual)
+
+    q_pc_pcb = """
+        SELECT
+            pc.id as primary_category_id
+            , pc.name as primary_category
+            , pcb.name as primary_category_bucket
+        FROM
+            (SELECT
+               *
+             FROM
+               zillions_primary_category
+             WHERE
+               show_julie = 1 OR show_julie = 1 * %s) pc
+        INNER JOIN
+            (%s) pcb
+        ON
+            pc.category_id = pcb.id
+        %s""" % (julie_weight, q_pcb, primary_names)
+        
+    if secondary_names:
+        secondary_names = split_list(secondary_names,'sc.name')
+    else:
+        secondary_names = ''
+        
+    q_sc_pc_pcb = """
+        SELECT
+            sc.id as secondary_category_id
+            , sc.name as secondary_category
+            , pc_pcb.primary_category
+            , pc_pcb.primary_category_id
+            , pc_pcb.primary_category_bucket
+        FROM
+            zillions_secondary_category sc
+        INNER JOIN
+            (%s) pc_pcb
+        ON
+            sc.primary_category_id = pc_pcb.primary_category_id
+        %s""" % (q_pc_pcb, secondary_names)
+    
+        
+    q_pc_t = """
+        SELECT
+            round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1-t.ed_perc/100) * %s),2) as signed_amount
+        FROM
+            zillions_transaction t
+        INNER JOIN
+            (%s) sc_pc_pcb
+        ON
+            t.secondary_category_id = sc_pc_pcb.secondary_category_id
+        """ % (ed_weight, julie_weight, q_sc_pc_pcb)
+        
+    sql_tuple = execute_query(q_pc_t)
+    
+    pc_t = sql_tuple[0].signed_amount
+
+    return pc_t

@@ -44,13 +44,22 @@ def index(request):
     #Get Julie Total
     julie_total = q_julie_total()
     
-    test_cat_totals = q_budget_summary_json()
+    individual = request.user.first_name.lower()
+    
+    test_cat_totals = q_budget_summary_json(individual)
+    
+    wedding_total = q_ed_pc_total('Wedding Fund','ed')
+    moving_account_total = q_ed_pc_total('Moving Account','ed')
+    julie_amortization_total = q_julie_amortization_total()
+
+    
+    
     
     #Flagged Count
     flagged = q_transaction_list(primary = None, 
                                        secondary = None,
                                        source = None,
-                                       individual = request.user.first_name.lower(),
+                                       individual = individual,
                                        startdate = None,
                                        enddate = None,
                                        description = '',
@@ -68,6 +77,9 @@ def index(request):
         'last_updated' : last_updated,
         'julie_total' : julie_total,
         'flagged' : flagged,
+        'wedding_total' : wedding_total,
+        'moving_account_total' : moving_account_total,
+        'julie_amortization_total' : julie_amortization_total,
         'test_cat_totals' : test_cat_totals
     })
     return HttpResponse(template.render(context))
@@ -728,7 +740,7 @@ def budget_edit(request):
                 # If ed_perc + julie_perc <>0 or 100 then flag
                 # FUTURE: flag to alert, not notification
                 if ed_perc + julie_perc != 0 and ed_perc + julie_perc != 100:
-                    warning_msg = "Budget for Secondary Category %s does not equal 100%% between Ed and Julie." % (sc)
+                    #warning_msg = "Budget for Secondary Category %s does not equal 100%% between Ed and Julie." % (sc)
                     messages.warning(request, warning_msg)
             return redirect('index')
 
