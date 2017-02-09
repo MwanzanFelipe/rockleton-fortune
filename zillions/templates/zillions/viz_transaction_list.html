@@ -1,0 +1,650 @@
+{% load staticfiles %}
+{% load rockleton_extras %}
+
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+
+		<!-- Always force latest IE rendering engine (even in intranet) & Chrome Frame
+		Remove this if you use the .htaccess -->
+		<meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+
+		<!-- Template to show list of transactions -->
+		<title>index</title>
+		<meta name="description" content="">
+		<meta name="author" content="Ed Rogers">
+
+		<meta name="viewport" content="width=device-width; initial-scale=1.0">
+
+		<!-- Replace favicon.ico & apple-touch-icon.png in the root of your domain and delete these references -->
+		<link rel="shortcut icon" href="/favicon.ico">
+		<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+		<style>
+			table, th, td {
+    			border: 1px solid black;
+    			border-collapse: collapse;
+			}
+			
+			tr:nth-child(even) {background-color: #f2f2f2}
+			
+			tr.flagged {background-color: #ffff00}
+			tr.flagged:hover {background-color: #cccc00}
+			tr:hover {background-color: #e6e6e6}
+			
+			.bar {
+			  fill: steelblue;
+			}
+
+			.bar:hover {
+			  fill: brown;
+			}
+			
+			.bar.positive {
+			  fill: steelblue;
+			}
+			.bar.positive:hover {
+				fill: #90b4d2
+			}
+			
+			.bar.negative {
+			  fill: red;
+			}
+			.bar.negative:hover {
+				fill: #ff6666
+			}
+			
+			.line {
+			  fill: none;
+			  stroke: #000;
+			  stroke-width: 1.5px;
+			}
+			
+            .legend {
+	            padding: 5px;
+	            font: 10px sans-serif;
+	            background: yellow;
+	            box-shadow: 2px 2px 1px #888;
+            }
+			
+			
+			.axis text {
+			  font: 10px sans-serif;
+			}
+			
+			.axis path,
+			.axis line {
+			  fill: none;
+			  stroke: #000;
+			  shape-rendering: crispEdges;
+			}
+			
+form {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  position: absolute;
+  left: 10px;
+  top: 10px;
+}
+
+label {
+  display: block;
+}
+
+
+			
+		</style>
+	</head>
+
+	<body>
+        <script src="{% static "zillions/media/d3/d3.v4.min.js" %}"></script>
+        <script src="{% static "zillions/media/jquery/jquery.js" %}"></script>
+
+		<script type="text/javascript">
+			$(document).ready(function() {
+				
+				transaction_list_dict = define_init_params();
+				
+				param_string = construct_param_string(transaction_list_dict);
+				
+				var $stats = $( "<div id='stats'></div>" );
+				var $table = $( "<table id='transaction_list'></table>" );
+				
+				$('#transaction_list').append( $stats, $table );
+				
+				$stats.append("Start Date: " + format_date(transaction_list_dict.startdate) + "<br>");
+				$stats.append("End Date: " + format_date(transaction_list_dict.enddate) + "<br>");
+ 
+				// Table header row
+				$table.append("<tr><th><b>Date</b></th><th><b>Description</b></th><th><b>Amount</b></th><th><b>Primary Category</b></th><th><b>Secondary Category</b></th><th><b>Source Account</b></th><th><b>Ed Percent</b></th><th><b>Julie Percent</b></th><th><b>Ed Amount</b></th><th><b>Julie Amount</b></th><th><b></b></th></tr>");								
+
+				$.getJSON( "{% url 'q_transaction_data_json' %}"+param_string, function( data ) {
+					console.log(data);
+					$stats.append(data[0].length + ' transaction(s) found');
+
+					$.each( data[0], function( index, transaction_row ) {
+
+						$table.append("<tr><td>"+format_date(transaction_row["transaction_date"])+"</td> \
+							<td>"+transaction_row["description"]+"</td> \
+							<td>"+format_money(transaction_row["signed_amount"])+"</td> \
+							<td>"+transaction_row["primary_category"]+"</td> \
+							<td>"+transaction_row["secondary_category"]+"</td> \
+							<td>"+transaction_row["source_name"]+"</td> \
+							<td>"+Math.round(transaction_row["ed_perc"]).toFixed(0)+"%</td> \
+							<td>"+Math.round(transaction_row["julie_perc"]).toFixed(0)+"%</td> \
+							<td>"+format_money(transaction_row["ed_signed_amount"])+"</td> \
+							<td>"+format_money(transaction_row["julie_signed_amount"])+"</td> \
+							<td><a href='" + construct_url(transaction_row['transaction_id']) + "'>edit</a></td> \
+							</tr>");
+						
+					});
+
+					data = data[1]
+
+					if (transaction_list_dict['chart'] == 'spend') {
+						chart_spend(data);
+					} else if (transaction_list_dict['chart'] == 'stacked_person') {
+						chart_spend_vs_stacked(data,0);
+					} else if (transaction_list_dict['chart'] == 'stacked_sc') {
+						chart_spend_vs_stacked(data,1);
+					} else if (transaction_list_dict['chart'] == 'budget') {
+						chart_budget(data);
+					}
+					
+
+
+				});
+	
+
+			});
+			function chart_spend_vs_stacked(data, sc_flag) {			
+				if (sc_flag==1) {
+					var keys = Object.keys(data[0])
+					var toRemove = ["week_number","perc_remaining", "moving_avg", "week_spend", "perc_remaining_moving_avg", "budgeted_amount", "primary_category"];
+					keys = keys.filter(function(x) { return toRemove.indexOf(x) < 0 });
+					console.log(data);
+				} else {
+				
+					var keys = ["ed_week_spend","julie_week_spend"];
+				}
+				transformed_data = create_grouped_to_stacked_list(data,keys);
+				
+				var n = transformed_data.length, // The number of series.
+				    m = transformed_data[0].length; // The number of values per series.
+				
+				// The xz array has m elements, representing the x-values shared by all series.
+				// The yz array has n elements, representing the y-values of each of the n series.
+				// Each yz[i] is an array of m non-negative numbers representing a y-value for xz[i].
+				// The y01z array has the same structure as yz, but with stacked [y₀, y₁] instead of y.
+				var xz = d3.range(m),
+				    yz = transformed_data,
+				    y01z = d3.stack().keys(d3.range(n))(d3.transpose(yz)),
+				    yMax = d3.max(yz, function(y) { return d3.max(y); }),
+				    y1Max = d3.max(y01z, function(y) { return d3.max(y, function(d) { return d[1]; }); });
+				
+				var margin = {top: 30, right: 30, bottom: 70, left: 60},
+				    width = 600 - margin.left - margin.right,
+				    height = 300 - margin.top - margin.bottom;							    
+				
+				
+				var chart = d3.select(".charts"),
+				    g = chart.append("g").attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+				
+				var x = d3.scaleBand()
+    				.domain(data.map(function(d) { return d.week_number; }))
+				    .domain(xz)
+				    .rangeRound([0, width])
+				    .padding(0.08);
+				
+				var y = d3.scaleLinear()
+				    .domain([0, y1Max])
+				    .range([height, 0]);
+				
+				var yAxis = d3.axisLeft()
+					.tickFormat(d3.format("$,"))
+				    .scale(y);
+				
+				chart.append("g")
+				    .attr("class", "yaxis")
+				    .attr("transform", "translate(" + margin.left+ ","+margin.top+")")
+				    .call(yAxis);
+
+  // text label for the y axis
+  chart.append("text")
+      .attr("transform", "rotate(-90)")
+      .attr("y", 0)
+      .attr("x",0 - (height / 2) - margin.top)
+      .attr("dy", "1em")
+      .style("text-anchor", "middle")
+      .text("$ Spent"); 
+				
+				var color = d3.scaleOrdinal()
+				    .domain(d3.range(n))
+				    .range(d3.schemeCategory20c);
+				
+				var series = g.selectAll(".series")
+				  .data(y01z)
+				  .enter().append("g")
+				    .attr("fill", function(d, i) { return color(i); });
+				
+				var rect = series.selectAll("rect")
+				  .data(function(d) { return d; })
+				  .enter().append("rect")
+				    .attr("x", function(d, i) { return x(i); })
+				    .attr("y", height)
+				    .attr("width", x.bandwidth())
+				    .attr("height", 0);
+				
+				rect.transition()
+				    .delay(function(d, i) { return i * 90; })
+				    .attr("y", function(d) { return y(d[1]); })
+				    .attr("height", function(d) { return y(d[0]) - y(d[1]); });
+				
+				g.append("g")
+				    .attr("class", "axis axis--x")
+				    .attr("transform", "translate(0," + height + ")")
+				    .call(d3.axisBottom(x)
+				        .tickSize(0)
+				        .tickPadding(6));
+				
+				d3.selectAll("input")
+				    .on("change", changed);
+				
+				function changed() {
+				  if (this.value === "grouped") transitionGrouped();
+				  else transitionStacked();
+				}
+				
+				function transitionGrouped() {
+				  y.domain([0, yMax]);
+				  
+				rescale();
+				
+				  rect.transition()
+				      .duration(150)
+				      .delay(function(d, i) { return i * 10; })
+				      .attr("x", function(d, i) { return x(i) + x.bandwidth() / n * this.parentNode.__data__.key; })
+				      .attr("width", x.bandwidth() / n)
+				    .transition()
+				      .attr("y", function(d) { return y(d[1] - d[0]); })
+				      .attr("height", function(d) { return y(0) - y(d[1] - d[0]); });
+				}
+				
+				function transitionStacked() {
+				  y.domain([0, y1Max]);
+				   
+				  rescale();
+				
+				  rect.transition()
+				      .duration(150)
+				      .delay(function(d, i) { return i * 10; })
+				      .attr("y", function(d) { return y(d[1]); })
+				      .attr("height", function(d) { return y(d[0]) - y(d[1]); })
+				    .transition()
+				      .attr("x", function(d, i) { return x(i); })
+				      .attr("width", x.bandwidth());
+				}
+				
+				function rescale() {
+				  
+				
+				  var yAxis = d3.axisLeft()
+				    .scale(y);
+				
+				
+				        chart.selectAll(".yaxis")
+				            .transition()
+				              .duration(500)
+				            .call(yAxis);
+				
+				
+				
+				}
+			}		
+				
+
+
+			
+			function chart_budget(data) {
+				var margin = {top: 30, right: 30, bottom: 40, left: 60},
+				    width = 600 - margin.left - margin.right,
+				    height = 300 - margin.top - margin.bottom;
+				    				    
+				var y = d3.scaleLinear()
+		    		.domain([-1, 1])
+		    		.range([height,0]);
+   
+				   
+				var x = d3.scaleBand()
+				    .rangeRound([0, width])
+				    .padding(0.1)
+					.domain(data.map(function(d) { return d.week_number; }));
+					
+
+    
+				var xAxis = d3.axisBottom()
+				    .scale(x);
+				
+				var yAxis = d3.axisLeft()
+				    .scale(y)
+				    .ticks(10, "%");
+
+				var chart = d3.select(".charts")
+				    .attr("width", width + margin.left + margin.right)
+				    .attr("height", height + margin.top + margin.bottom)
+				  .append("g")
+				    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+				    
+				chart.append("line")
+				    .attr("y1", y(0))
+				    .attr("y2", y(0))
+				    .attr("x1", 0)
+				    .attr("x2", width);
+				    
+				    
+				  // Add the y Axis
+				  chart.append("g")
+				      .call(yAxis);
+				  
+				  chart.append("text")
+				      .attr("transform", "rotate(-90)")
+				      .attr("y", 0 - margin.left)
+				      .attr("x",0 - (height / 2))
+				      .attr("dy", "1em")
+				      .style("text-anchor", "middle")
+				      .text("% Budget Remaining");
+
+				chart.append("g")
+				    .attr("class", "x axis")
+				    .attr("transform", "translate(0," + height + ")")
+				    .call(xAxis)
+				  .selectAll("text")
+				    .style("text-anchor", "end")
+				    .attr("dx", "-.8em")
+				    .attr("dy", "-.55em")
+				    .attr("transform", "rotate(-45)" );
+				    
+				    
+				chart.selectAll(".bar")
+				    .data(data)
+				  .enter().append("rect")
+				    .attr("class", function(d) { return d.week_spend < 0 ? "bar negative" : "bar positive"; })
+				    .attr("x", function(d) { return x(d.week_number); })
+				    .attr("y", function(d) { return y(Math.max(0, d.perc_remaining)); })
+				    .attr("height", function(d) { return Math.abs(y(d.perc_remaining) - y(0)); })
+				    .attr("width", x.bandwidth());
+
+
+				chart.append("text")
+				        .attr("x", (width / 2))             
+				        .attr("y", 0 - (margin.top / 2))
+				        .attr("text-anchor", "middle")  
+				        .style("font-size", "16px") 
+				        .style("text-decoration", "underline")  
+				        .text("Budget Surplus vs moving avg");
+					
+
+				    
+				 var line = d3.line()
+				    .x(function(d, i) { return x(d.week_number) + i + x.bandwidth()/2; })
+				    .y(function(d, i) { return y(d.perc_remaining_moving_avg); }); 
+					
+				chart.append("path")
+					.datum(data)
+					.attr("class", "line")
+					.attr("d", line);
+					
+			}
+			
+			function chart_spend(data) {
+				console.log(data);
+				var margin = {top: 30, right: 30, bottom: 40, left: 60},
+				    width = 600 - margin.left - margin.right,
+				    height = 300 - margin.top - margin.bottom;
+				    
+				var y = d3.scaleLinear()
+				    .range([height, 0]);
+				y.domain([0, d3.max(data, function(d) { return d.week_spend; })]);
+				
+				
+				var x = d3.scaleBand()
+				    .padding(0.1)
+				    .rangeRound([0, width], .1);
+				x.domain(data.map(function(d) { return d.week_number; }));
+				
+  
+				
+				var xAxis = d3.axisBottom()
+				    .scale(x);
+    
+				var chart = d3.select(".charts")
+				    .attr("width", width + margin.left + margin.right)
+				    .attr("height", height + margin.top + margin.bottom)
+				  .append("g")
+				    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+				    
+				var yAxis = d3.axisLeft()
+				    .tickFormat(d3.format("$,"))
+				    .scale(y);
+				    
+				  // Add the y Axis
+				  chart.append("g")
+				      .call(yAxis);
+				  
+				  chart.append("text")
+				      .attr("transform", "rotate(-90)")
+				      .attr("y", 0 - margin.left)
+				      .attr("x",0 - (height / 2))
+				      .attr("dy", "1em")
+				      .style("text-anchor", "middle")
+				      .text("$ Spent"); 
+				    
+
+
+				chart.append("g")
+				    .attr("class", "x axis")
+				    .attr("transform", "translate(0," + height + ")")
+				    .call(xAxis)
+				  .selectAll("text")
+				    .style("text-anchor", "end")
+				    .attr("dx", "-.8em")
+				    .attr("dy", "-.55em")
+				    .attr("transform", "rotate(-45)" );
+				    
+				chart.selectAll(".bar")
+				    .data(data)
+				  .enter().append("rect")
+				    .attr("class", "bar")
+				    .attr("x", function(d) { return x(d.week_number); })
+				    .attr("y", function(d) { return y(d.week_spend); })
+				    .attr("height", function(d) { return height - y(d.week_spend); })
+				    .attr("width", x.bandwidth());
+				    
+				    
+				chart.append("text")
+				        .attr("x", (width / 2))             
+				        .attr("y", 0 - (margin.top / 2))
+				        .attr("text-anchor", "middle")  
+				        .style("font-size", "16px") 
+				        .style("text-decoration", "underline")  
+				        .text("Spend w/ Trendline");
+				        
+				 var line = d3.line()
+				    .x(function(d, i) { return x(d.week_number) + i + x.bandwidth()/2; })
+				    .y(function(d, i) { return y(d.moving_avg); }); 
+					
+				chart.append("path")
+					.datum(data)
+					.attr("class", "line")
+					.attr("d", line);
+
+			}
+			
+			function create_grouped_to_stacked_list(data,keys) {
+			  var k = [];
+			
+			  for (i = 0; i < keys.length; ++i) {
+			    k[i] = []; 
+			    for (j = 0; j < data.length; ++j) {
+			      k[i].push(data[j][keys[i]]);
+			    }
+			  }
+			  
+			  return k;
+			}
+			
+			function construct_url(id) {
+				var url = "{% url 'UpdateTransactionView' pk=1234567890 %}"
+				url = url.replace('1234567890', id);
+				return url;
+			}
+			
+			function format_date(date) {
+				
+				
+				if (date.length == 8) {
+					date = date.substring(0, 4) + '-' + date.substring(4, 6) + '-' + date.substring(6, 8);
+				}
+				var new_date = new Date(date);
+				new_date.setDate(new_date.getDate() + 1);
+				
+				var monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "June",
+					"July", "Aug", "Sept", "Oct", "Nov", "Dec"
+					];
+				
+				var month = monthNames[new_date.getMonth()];
+				var day = new_date.getDate();
+				var year = new_date.getFullYear();
+				
+				new_date = month + " " + day + ', ' + year
+				
+				return new_date;				
+			}
+			
+			function format_money(signed_amount) {
+				if (signed_amount < 0) {
+					signed_amount = "-$" + Math.abs(signed_amount).toFixed(2);
+				} else {
+					signed_amount = "$" + Math.abs(signed_amount).toFixed(2);
+				};
+				return signed_amount;
+			}
+			
+		
+			function construct_param_string(transaction_list_dict) {
+				param_string = "?"
+				for(key in transaction_list_dict){
+					var value = transaction_list_dict[key];
+					if (value) {
+						param_string = param_string + "&" + key + "=" + value
+					}
+				}
+				return param_string;
+			}
+			
+			function define_init_params() {
+				var transaction_list_dict = {};
+				transaction_list_dict.primary = "{{ request.GET.primary|urlname }}".replace(/&amp;/g, '&');
+				transaction_list_dict.secondary = "{{ request.GET.secondary|urlname }}".replace(/&amp;/g, '&');
+				transaction_list_dict.source = "{{ request.GET.source|urlname }}".replace(/&amp;/g, '&');
+				transaction_list_dict.individual = "{{ request.GET.individual }}"
+				transaction_list_dict.startdate = "{{ request.GET.startdate }}"
+				transaction_list_dict.enddate = "{{ request.GET.enddate }}"
+				transaction_list_dict.description = "{{ request.GET.description|urlname }}".replace(/&amp;/g, '&');
+				transaction_list_dict.amount_lte = "{{ request.GET.amount_lte }}"
+				transaction_list_dict.amount_gte = "{{ request.GET.amount_gte }}"
+				transaction_list_dict.transaction_type = "{{ request.GET.transaction_type }}"
+				transaction_list_dict.incl_internal_transfer = "{{ request.GET.incl_internal_transfer }}"
+				transaction_list_dict.flagged = "{{ request.GET.flagged }}"
+				transaction_list_dict.group_by = "{{ request.GET.group_by|urlname }}".replace(/&amp;/g, '&');
+				transaction_list_dict.interval = "{{ request.GET.interval }}"
+				
+				transaction_list_dict.chart = "{{ request.GET.chart }}"
+			    return transaction_list_dict;
+			}
+			
+		
+		</script>
+				
+		
+		<div>
+			<header>
+				<h1>Visual Transaction List</h1>
+			</header>
+			
+			{% if user.first_name == "Ed" %}
+				<nav>
+					<p>
+						<a href = {% url 'index' %}>Home</a><br>
+					</p>
+				</nav>
+					<svg width="600" height="300" class="charts">
+						<!-- Container for d3 spend viz -->
+					</svg>
+					
+				
+
+				
+<a href='#' id='check_var'>Check values</a><br/><br/>
+
+{% if request.GET.chart = 'stacked_person' %}
+	Format<br/>
+	<input type="radio"  name="mode" value="grouped" /> Grouped
+	<input type="radio"  name="mode" value="stacked" /> Stacked
+	<br/><br/>
+{% endif %}
+
+<ul>
+  <li>Views
+    <ul>
+      <li>Ed
+        <ul>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&secondary={{ request.GET.secondary|urlname }}&source={{ request.GET.source|urlname }}&individual=ed&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=spend'>Spend $ with trendline</a></li>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&secondary={{ request.GET.secondary|urlname }}&source={{ request.GET.source|urlname }}&individual=ed&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=budget'>Spend % vs budget</a></li>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&source={{ request.GET.source|urlname }}&individual=ed&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=stacked_sc'>Spend $ split by secondary category</a></li>
+        </ul>
+      </li>
+      <li>Julie
+        <ul>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&secondary={{ request.GET.secondary|urlname }}&source={{ request.GET.source|urlname }}&individual=julie&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=spend'>Spend $ with trendline</a></li>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&source={{ request.GET.source|urlname }}&individual=julie&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=stacked_sc'>Spend $ split by secondary category</a></li>
+        </ul>
+      </li>
+      <li>Ed and Julie
+        <ul>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&secondary={{ request.GET.secondary|urlname }}&source={{ request.GET.source|urlname }}&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=spend'>Spend $ with trendline</a></li>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&secondary={{ request.GET.secondary|urlname }}&source={{ request.GET.source|urlname }}&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=stacked_person'>Stacked spend $ comparison</a></li>
+          <li><a href='{% url 'viz_transaction_list' %}?primary={{ request.GET.primary|urlname }}&source={{ request.GET.source|urlname }}&startdate={{ request.GET.startdate }}&enddate={{ request.GET.enddate }}&description={{ request.GET.description|urlname }}&amount_lte={{ request.GET.amount_lte }}&amount_gte={{ request.GET.amount_gte }}&transaction_type={{ request.GET.transaction_type }}&incl_internal_transfer={{ request.GET.incl_internal_transfer }}&flagged={{ request.GET.flagged }}&group_by={{ request.GET.group_by|urlname }}&interval={{ request.GET.interval }}&chart=stacked_sc'>Spend $ split by secondary category</a></li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+</ul>		
+				
+				<div id="transaction_list">
+					<!-- Container for d3 budget viz -->
+				</div>
+				<div>
+					<svg class="chart_spend_vs">
+						<!-- Container for d3 spend viz -->
+					</svg><br>
+					
+					<svg class="chart_budget">
+						<!-- Container for d3 budget viz -->
+					</svg>
+					
+				</div>
+
+
+			{% endif %}
+			
+			
+
+
+			<footer>
+				<p>
+				</p>
+			</footer>
+		</div>
+	</body>
+</html>

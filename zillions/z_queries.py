@@ -3,7 +3,6 @@ from collections import namedtuple
 from decimal import *
 from datetime import datetime, timedelta, date
 from django.db.models import Sum, Count, F, Q
-#from django.utils import simplejson
 from django.core.serializers.json import DjangoJSONEncoder
 import json
 from django.http import HttpResponse
@@ -19,14 +18,13 @@ def namedtuplefetchall(cursor):
     return [nt_result(*row) for row in cursor.fetchall()]
 
 def cursor_execute(query_string):
-    
+    # Execute SQL query
     cursor = connection.cursor()
     cursor.execute(query_string)
     
     return cursor
 
 def execute_query(query_string):
-    
     #Convert SQL query to iterable object
     sql_tuple = namedtuplefetchall(cursor_execute(query_string))
     
@@ -46,26 +44,6 @@ def drop_temp_table(table_name):
     except:
         pass
     return
-
-
-
-def qs_pcb(bucket_name = None):
-    #Get Primary Category Buckets
-    
-    if bucket_name is not None:
-        bucket_name = split_list(bucket_name,'name')
-    else:
-        bucket_name = ''
-
-    query_string = " \
-        SELECT \
-            * \
-        FROM \
-            zillions_primary_category_bucket \
-        %s \
-    " % bucket_name
-
-    return query_string
 
 def pcb(bucket_name = None):
     #Get Primary Category Buckets
@@ -88,35 +66,11 @@ def pcb(bucket_name = None):
 
     return cursor_execute(query_string)
 
-def qs_pc_pcb(bucket_name, primary_names):
-    #Get Primary Categories
-    
-    if primary_names:
-        primary_names = split_list(primary_names,'pc.name')
-    else:
-        primary_names = ''
-    
-    pcb_string = qs_pcb(bucket_name)
-    
-    
-    query_string = " \
-        SELECT \
-            pc.id as primary_category_id \
-            , pc.name as primary_category \
-            , pcb.name as primary_category_bucket \
-        FROM \
-            zillions_primary_category pc \
-        INNER JOIN \
-            (%s) pcb \
-        ON \
-            pc.category_id = pcb.id \
-        %s \
-    " % (pcb_string, primary_names)
-
-    return query_string
-
 def pc_pcb(bucket_name, primary_names):
-    #Get Primary Categories
+    #Get Primary Categories linked to Primary Category Buckets
+    
+    # Chain:
+    # def pcb(bucket_name = None):
     
     if primary_names:
         primary_names = split_list(primary_names,'pc.name')
@@ -144,36 +98,13 @@ def pc_pcb(bucket_name, primary_names):
 
     return cursor_execute(query_string)
 
-def qs_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
-    #Get Secondary Category Buckets
-    
-    if secondary_names:
-        secondary_names = split_list(secondary_names,'sc.name')
-    else:
-        secondary_names = ''
-    
-    pc_pcb_string = qs_pc_pcb(bucket_name, primary_names)
-    
-    query_string = " \
-        SELECT \
-            sc.id as secondary_category_id \
-            , sc.name as secondary_category \
-            , pc_pcb.primary_category \
-            , pc_pcb.primary_category_id \
-            , pc_pcb.primary_category_bucket \
-        FROM \
-            zillions_secondary_category sc \
-        INNER JOIN \
-            (%s) pc_pcb \
-        ON \
-            sc.primary_category_id = pc_pcb.primary_category_id \
-        %s \
-    " % (pc_pcb_string, secondary_names)
-
-    return query_string
-
 def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
-    #Get Secondary Category Buckets
+    # Get Secondary Categories
+    # Linked to Primary Categories linked to Primary Category Buckets
+    
+    # Chain:
+    # def pc_pcb(bucket_name, primary_names)
+    #     def pcb(bucket_name = None):
     
     if secondary_names:
         secondary_names = split_list(secondary_names,'sc.name')
@@ -203,26 +134,8 @@ def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None):
 
     return cursor_execute(query_string)
 
-def qs_s_sc():
-    #Get Source category names for sources
-    
-    query_string = " \
-        SELECT \
-            s.id as source_id \
-            , s.name as source \
-            , sc.name as source_category \
-        FROM \
-            zillions_source s \
-        LEFT JOIN \
-            zillions_source_category sc \
-         ON \
-            s.category_id = sc.id \
-    "
-
-    return query_string
-
 def s_sc():
-    #Get Source category names for sources
+    #Get Source category names for sources (along with sources)
     
     drop_temp_table('s_sc')
     
@@ -242,31 +155,12 @@ def s_sc():
 
     return cursor_execute(query_string)
 
-def qs_t_sc():
-    #Get Secondary Category names for transactions
-    
-    query_string = " \
-        SELECT \
-            t.id as transaction_id \
-            , t.transaction_date \
-            , t.description \
-            , t.original_description \
-            , t.amount \
-            , t.transaction_type \
-            , sc.name as secondary_category \
-            , t.source_id \
-        FROM  \
-            zillions_transaction t \
-        INNER JOIN \
-            zillions_secondary_category sc \
-        ON \
-            t.secondary_category_id = sc.id \
-    "
-
-    return query_string
-
 def t_sc():
     #Get Secondary Category names for transactions
+    
+    #FUTURE: Does this join make sense? get all transactions??
+    # Perhaps because this is used to find duplicate transactions that are imported
+    # Though we could (should?) join after duplicates are found. This will then be a smaller join
     
     drop_temp_table('t_sc')
     
@@ -291,33 +185,13 @@ def t_sc():
 
     return cursor_execute(query_string)
 
-def qs_s_t_sc():
-    #Get Source names for transactions/secondary category names
-    
-    t_sc_string = qs_t_sc()
-    
-    query_string = " \
-        SELECT \
-            t_sc.transaction_id \
-            , t_sc.transaction_date \
-            , t_sc.description \
-            , t_sc.original_description \
-            , t_sc.amount \
-            , t_sc.transaction_type \
-            , t_sc.secondary_category \
-            , s.name as source \
-        FROM \
-            zillions_source s \
-        INNER JOIN \
-            (%s) t_sc \
-        ON \
-            s.id = t_sc.source_id \
-    " % t_sc_string
 
-    return query_string
 
 def s_t_sc():
     #Get Source names for transactions/secondary category names
+    
+    # Chain:
+    # def t_sc()
     
     t_sc()
     
@@ -344,107 +218,15 @@ def s_t_sc():
 
     return cursor_execute(query_string)
 
-def qs_t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
-    #Get List of transactions given filter criteria 
-    
-    #Initialize filters
-    if startdate is None:
-        startdate = "2012-01-01"
-        
-    if enddate is None:
-        enddate = date.today()
-
-    if amount_lte:
-        amount_lte = "AND amount <= %s" % amount_lte
-    else:
-        amount_lte = ''
-        
-    if amount_gte:
-        amount_gte = "AND amount >= %s" % amount_gte
-    else:
-        amount_gte = ''
-        
-    if transaction_type:
-        transaction_type = "AND transaction_type = %s" % transaction_type
-    else:
-        transaction_type = ''
-
-    if incl_internal_transfer == 0:
-        incl_internal_transfer = "AND internal_transfer = 0"
-    else:
-        incl_internal_transfer = ''
-
-    if flagged == 1:
-        flagged = "AND flagged = 1"
-    else:
-       flagged = ''
-        
-    
-    # By default, filter for perc > -1, therefore see everything
-    ed_perc = -100
-    julie_perc = -100
-    
-    if individual:
-        if individual == "ed":
-            # Filter out instances when ed is not involved at all (WHERE ed_perc > 0)
-            ed_perc = 0
-        elif individual == "julie":
-            # Filter out instances when julie is not involved at all (WHERE (1-ed_perc) > 0)
-            julie_perc = 0  
-            
-    # Apply description filter to original description and alias
-    o_description = description
-    alias = description
-    
-    sc_pc_pcb_string = qs_sc_pc_pcb(bucket_name, primary_names, secondary_names)
-    
-    #Using logic on Year Number to account for times when year rolls over mid week
-    query_string = " \
-        SELECT \
-            t.id as transaction_id \
-            , t.transaction_date \
-            , CASE \
-                WHEN t.alias = '' then t.description \
-                ELSE t.alias \
-                END as description \
-            , t.transaction_type * t.amount as signed_amount \
-            , sc_pc_pcb.secondary_category \
-            , sc_pc_pcb.secondary_category_id \
-            , sc_pc_pcb.primary_category \
-            , sc_pc_pcb.primary_category_id \
-            , sc_pc_pcb.primary_category_bucket \
-            , t.source_id \
-            , t.ed_perc as ed_perc \
-            , (1-t.ed_perc/100) * 100 as julie_perc \
-            , t.flagged \
-            , t.transaction_type * t.amount * ed_perc/100 as ed_signed_amount \
-            , t.transaction_type * t.amount * (1-ed_perc/100) as julie_signed_amount \
-            , CASE \
-                WHEN WEEK(t.transaction_date,2) > WEEK(t.transaction_date) then YEAR(t.transaction_date) - 1 \
-                ELSE YEAR(t.transaction_date) \
-                END as year_number \
-            , WEEK(t.transaction_date,2) as week_number \
-        FROM \
-            (SELECT \
-                * \
-            FROM \
-                zillions_transaction \
-            WHERE \
-                transaction_date >= '%s' \
-                AND transaction_date <= '%s' \
-                AND (description LIKE '%%%%%s%%%%' OR original_description LIKE '%%%%%s%%%%' OR alias LIKE '%%%%%s%%%%') \
-                %s %s %s %s %s\
-                AND ed_perc/100 > %s \
-                AND (1-ed_perc/100) > %s) t \
-        INNER JOIN \
-            (%s) sc_pc_pcb \
-        ON t.secondary_category_id = sc_pc_pcb.secondary_category_id \
-    " % (startdate, enddate, description, o_description, alias, amount_lte, amount_gte, transaction_type, incl_internal_transfer, flagged, ed_perc, julie_perc, sc_pc_pcb_string)    
-
-    return query_string
 
 def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
-    #Get List of transactions given filter criteria 
+    #Get List of transactions given filter criteria
+    # Linked to Secondary/Primary Categories linked to Primary Category Buckets
+    
+    # Chain:
+    # def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #     def pc_pcb(bucket_name, primary_names)
+    #         def pcb(bucket_name = None):
     
     #Initialize filters
     if startdate is None:
@@ -545,42 +327,6 @@ def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None
 
     return cursor_execute(query_string)
 
-def qs_dw_sc_pc_pcb(startdate, enddate):
-    # Create a dummy table with every secondary category and every week in scope
-    # This is used to populate 0 for weeks with no transactions (instead of simply omitting the week)
-    # If we don't do this, a 3-week period with only one transaction will have an average equaling that one transaction
-    # instead of averaging 2 0's and that transaction
-    
-    # sc_pc_pcb assumed to already exist
-    sc_pc_pcb_string = qs_sc_pc_pcb()
-    
-    query_string = " \
-        SELECT \
-            * \
-        FROM \
-            (SELECT \
-                CASE \
-                    WHEN WEEK(a.Date,2) > WEEK(a.Date) then YEAR(a.Date) - 1 \
-                    ELSE YEAR(a.Date) \
-                    END as year_number \
-                , WEEK(a.Date,2) as week_number \
-            FROM \
-                (SELECT \
-                    curdate() - INTERVAL (a.a + (10 * b.a) + (100 * c.a)) DAY as Date \
-                FROM \
-                    (select 0 as a union all select 1 union all select 2 union all select 3 union all select 4 union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) as a \
-                CROSS JOIN \
-                    (select 0 as a union all select 1 union all select 2 union all select 3 union all select 4 union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) as b \
-                CROSS JOIN \
-                    (select 0 as a union all select 1 union all select 2 union all select 3 union all select 4 union all select 5 union all select 6 union all select 7 union all select 8 union all select 9) as c) a \
-            WHERE \
-                a.Date BETWEEN '%s' \
-                AND '%s' \
-            GROUP BY 1,2) as dw, (%s) sc_pc_pcb \
-    " % (startdate, enddate, sc_pc_pcb_string)
-    
-    return query_string
-
 def dw_sc_pc_pcb(startdate, enddate):
     # Create a dummy table with every secondary category and every week in scope
     # This is used to populate 0 for weeks with no transactions (instead of simply omitting the week)
@@ -618,22 +364,6 @@ def dw_sc_pc_pcb(startdate, enddate):
     
     return cursor_execute(query_string)
 
-def qs_s(sources):
-    # Get list of sources
-    
-    if sources: 
-        sources = split_list(sources,'name')
-    
-    query_string = " \
-        SELECT \
-            * \
-        FROM \
-            zillions_source \
-        %s \
-    " % (sources)
-
-    return query_string
-
 def s(sources):
     # Get list of sources
     
@@ -663,7 +393,7 @@ def q_ed_primary_buckets():
     # I included a @property in the model to get the signed_amount, but there's no way to annotate by a property
     # So for now, I'm going to write Raw SQL
     
-    # Primary Category Totals for Ed
+    # Get Primary Category Totals for Ed
     # Show signed amounts multiplied by Ed Percent along side Primary Category Bucket and Primary Category Names
     # Collection Secondary Category ids to join to transactions
     # Collect Primary Category Names
@@ -671,6 +401,12 @@ def q_ed_primary_buckets():
     bucket_name = None
     primary_names = None
     secondary_names = None
+    
+    # Chain:
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None):
+
 
     sc_pc_pcb(bucket_name, primary_names, secondary_names)
     
@@ -794,6 +530,10 @@ def q_julie_total():
 def q_new_transactions(perc_bound):
     # Get transactions from the import table that do not have an exact match to transactions from Mint
     
+    # Chain:
+    #     def s_t_sc():
+    #        def t_sc():
+    
     s_t_sc()
     
     query_string = " \
@@ -863,6 +603,8 @@ def q_new_transactions(perc_bound):
     return transaction_list, transaction_list_wip
 
 def q_transaction_list(primary, secondary, source, individual, startdate, enddate, description, amount_lte, amount_gte, transaction_type, incl_internal_transfer, flagged):
+    # Get List of transactions given filter criteria and combine with source info
+    # Also generate object to be consumed by python/django
     
     # If filtering by category or source, allow for SQL filter term
 
@@ -871,6 +613,13 @@ def q_transaction_list(primary, secondary, source, individual, startdate, enddat
     # https://docs.djangoproject.com/en/dev/topics/db/sql/#performing-raw-queries
     # https://docs.djangoproject.com/en/dev/topics/db/sql/#executing-custom-sql-directly
     # https://docs.djangoproject.com/en/dev/topics/security/#sql-injection-protection
+    
+    # Chain:
+    #def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None)
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None) 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None)
+    
 
     #FUTURE be careful here. there is no way, should we eventually chose to, to pass a bucket_name to the transaction_list
     bucket_name = None 
@@ -880,31 +629,37 @@ def q_transaction_list(primary, secondary, source, individual, startdate, enddat
 
     s(source)
 
+    drop_temp_table('transaction_list')
     # Get spreadsheet view of transactions, including primary / secondary category name, source name, and week/year number
     query_string = " \
-        SELECT \
-            t_sc_pc_pcb.transaction_id \
-            , t_sc_pc_pcb.transaction_date \
-            , t_sc_pc_pcb.description \
-            , round(t_sc_pc_pcb.signed_amount,2) as signed_amount\
-            , t_sc_pc_pcb.secondary_category \
-            , t_sc_pc_pcb.primary_category \
-            , t_sc_pc_pcb.primary_category_bucket \
-            , s.name as source_name\
-            , round(t_sc_pc_pcb.ed_perc,2) as ed_perc \
-            , round(t_sc_pc_pcb.julie_perc,2) as julie_perc \
-            , t_sc_pc_pcb.flagged \
-            , round(t_sc_pc_pcb.ed_signed_amount,2) as ed_signed_amount\
-            , round(t_sc_pc_pcb.julie_signed_amount,2) as julie_signed_amount \
-            , t_sc_pc_pcb.year_number \
-            , t_sc_pc_pcb.week_number \
-        FROM \
-            s \
-        INNER JOIN \
-            t_sc_pc_pcb \
-        ON s.id = t_sc_pc_pcb.source_id \
-        ORDER BY t_sc_pc_pcb.transaction_date DESC;"
+        CREATE TEMPORARY TABLE transaction_list as ( \
+            SELECT \
+                t_sc_pc_pcb.transaction_id \
+                , t_sc_pc_pcb.transaction_date \
+                , t_sc_pc_pcb.description \
+                , round(t_sc_pc_pcb.signed_amount,2) as signed_amount\
+                , t_sc_pc_pcb.secondary_category \
+                , t_sc_pc_pcb.primary_category \
+                , t_sc_pc_pcb.primary_category_bucket \
+                , s.name as source_name\
+                , round(t_sc_pc_pcb.ed_perc,2) as ed_perc \
+                , round(t_sc_pc_pcb.julie_perc,2) as julie_perc \
+                , t_sc_pc_pcb.flagged \
+                , round(t_sc_pc_pcb.ed_signed_amount,2) as ed_signed_amount\
+                , round(t_sc_pc_pcb.julie_signed_amount,2) as julie_signed_amount \
+                , t_sc_pc_pcb.year_number \
+                , t_sc_pc_pcb.week_number \
+            FROM \
+                s \
+            INNER JOIN \
+                t_sc_pc_pcb \
+            ON s.id = t_sc_pc_pcb.source_id \
+            ORDER BY t_sc_pc_pcb.transaction_date DESC \
+        );"
         # http://stackoverflow.com/questions/11146190/python-typeerror-not-enough-arguments-for-format-string
+    cursor_execute(query_string)
+
+    query_string = "SELECT * FROM transaction_list;"
     
     sql_tuple = execute_query(query_string)
     transaction_list = []
@@ -931,15 +686,91 @@ def q_transaction_list(primary, secondary, source, individual, startdate, enddat
     
     return transaction_list
 
+def q_viz_transaction_list(primary, secondary, source, individual, startdate, enddate, description, amount_lte, amount_gte, transaction_type, incl_internal_transfer, flagged, group_by, interval):
+    # Generate a list object that contains transactions with a given filter along with an aggregation of the same transactions
+    # **Deprecated** in favor of q_transaction_data_json()
+    
+    transaction_list = q_transaction_list(primary, 
+                                       secondary,
+                                       source,
+                                       individual,
+                                       startdate,
+                                       enddate,
+                                       description,
+                                       amount_lte,
+                                       amount_gte,
+                                       transaction_type,
+                                       incl_internal_transfer,
+                                       flagged)
+    
+    # Construct SQL query given level of granularity and aggregation required
+    
+    field_string = " \
+        primary_category \
+        , SUM(signed_amount) as signed_amount \
+        , SUM(ed_signed_amount) as ed_signed_amount \
+        , SUM(julie_signed_amount) as julie_signed_amount \
+        , year_number"
+        
+    groupby_string = " \
+        primary_category, year_number"
+    orderby_string = " \
+        ORDER BY year_number DESC"
+            
+    if group_by == "secondary":
+        field_string = field_string + ", secondary_category"
+        groupby_string = groupby_string + ", secondary_category"
+        
+    if interval == "week":
+        field_string = field_string + ", week_number"
+        groupby_string = groupby_string + ", week_number"
+        orderby_string = orderby_string + ", week_number DESC;"
+    elif interval == "month":
+        field_string = field_string + ", MONTH(transaction_date) as month_number"
+        groupby_string = groupby_string = ", month_number"
+        orderby_string = orderby_string + ", month_number DESC;"
+        
+    query_string = "SELECT " + field_string + " FROM transaction_list GROUP BY " + groupby_string + orderby_string
+
+    sql_tuple = execute_query(query_string)
+    viz_transaction_list = []
+    
+    # Create dictionary for returned transactions
+    for row in sql_tuple:
+        transaction = {}
+        
+        transaction['primary_category'] = row.primary_category
+        transaction['signed_amount'] = row.signed_amount
+        transaction['ed_signed_amount'] = row.ed_signed_amount
+        transaction['julie_signed_amount'] = row.julie_signed_amount
+        transaction['year_number'] = row.year_number
+        
+        if group_by == "secondary":
+            transaction['secondary_category'] = row.secondary_category
+        if interval == "week":
+            transaction['week_number'] = row.week_number
+        elif  interval == "month":
+            transaction['month_number'] = row.month_number
+        viz_transaction_list.append(transaction)
+    
+    return transaction_list, viz_transaction_list
+
 def q_julie_amortization_total():
+    #Get Julie Total: julie_signed_amount
     
     bucket_name = 'Debt'
     primary_names = None
     secondary_names = None
     
+    # Chain:
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None) 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None)
+
+    
     sc_pc_pcb(bucket_name, primary_names, secondary_names)
 
-    #Get Julie Total: julie_signed_amount
+    
     query_string = " \
             SELECT \
                 -1 * round(sum(t.transaction_type * t.amount * (1-t.ed_perc/100)), 2) as julie_signed_amount \
@@ -955,66 +786,9 @@ def q_julie_amortization_total():
 
     return julie_amort_total
 
-def qs_sum_weekly_spend(ed_weight, julie_weight, startdate, enddate):
-    # Get sum of weekly spend including dummy weeks and for Julie, Ed, or both
-    
-    dw_sc_pc_pcb_string = qs_dw_sc_pc_pcb(startdate, enddate)
-    
-    
-    query_string = " \
-        /* Get sum of weekly spend within date range for every secondary transaction with 0's filled for missing weeks */ \
-        SELECT \
-            dw_week_number \
-            , dw_year_number \
-            , primary_category \
-            , primary_category_bucket \
-            , primary_category_id \
-            , secondary_category \
-            , dwsc.secondary_category_id \
-            , CASE \
-                WHEN weekly_spend is NULL then 0 \
-                ELSE weekly_spend \
-                END as weekly_spend \
-        FROM \
-            \
-            /* Get sum of weekly spend for all secondary transactions within date range */ \
-            (SELECT \
-                secondary_category_id \
-                , CASE \
-                    WHEN WEEK(transaction_date,2) > WEEK(transaction_date) then YEAR(transaction_date) - 1 \
-                    ELSE YEAR(transaction_date) \
-                    END as sum_calc_year_number \
-                , WEEK(transaction_date,2) as sum_calc_week_number \
-                , -sum(transaction_type * amount * ed_perc/100 * %s + transaction_type * amount * (1- ed_perc/100) * %s) as weekly_spend \
-            FROM \
-                zillions_transaction \
-            WHERE \
-                transaction_date >= '%s' \
-                AND transaction_date <= '%s' \
-                AND internal_transfer = 0 \
-            GROUP BY \
-                secondary_category_id, sum_calc_week_number, sum_calc_year_number) as sum_calc \
-        RIGHT JOIN \
-            (SELECT \
-                year_number as dw_year_number \
-                , week_number as dw_week_number \
-                , primary_category \
-                , primary_category_bucket \
-                , primary_category_id \
-                , secondary_category \
-                , secondary_category_id \
-            FROM \
-                (%s) dw_sc_pc_pcb) as dwsc \
-        ON \
-            sum_calc.sum_calc_year_number = dwsc.dw_year_number \
-            AND sum_calc.sum_calc_week_number = dwsc.dw_week_number \
-            AND sum_calc.secondary_category_id = dwsc.secondary_category_id \
-    " % (ed_weight, julie_weight, startdate, enddate, dw_sc_pc_pcb_string)
-        
-    return query_string
 
 def sum_weekly_spend(ed_weight, julie_weight, startdate, enddate):
-    # Get sum of weekly spend including dummy weeks and for Julie, Ed, or both
+    # Get sum of weekly spend including dummy weeks for Julie, Ed, or both
     
     dw_sc_pc_pcb(startdate, enddate)
     
@@ -1082,6 +856,7 @@ def scma(startdate, enddate, moving_avg_weeks, individual):
     delta = enddate - startdate
     num_weeks = (delta.days + 1) / 7
     
+    drop_temp_table('sc_moving_avg')
     # Create template table
     query_string = " \
         CREATE TEMPORARY TABLE sc_moving_avg ( \
@@ -1146,60 +921,19 @@ def erjs_weights(individual):
             ed_weight = 0  
     return ed_weight, julie_weight
 
-def qs_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
-    
-    # Determine if we should filter out an individual's spending contribution 
-    ed_weight, julie_weight = erjs_weights(individual)
-    
-    #FUTURE: Pull filter criteria into this function call if necessary
-    #sc_pc_pcb_string = qs_sc_pc_pcb()
-
-    # Get secondary category moving averages
-    scma(startdate, enddate, moving_avg_weeks, individual)
-    
-    # Get sum of weekly spend with 0 filled for empty weeks
-    sum_weekly_spend_string = qs_sum_weekly_spend(ed_weight, julie_weight, startdate, enddate)
-    
-    query_string = " \
-        SELECT \
-            dw_w_t_sc_pc_pcb.year_number \
-            , dw_w_t_sc_pc_pcb.week_number \
-            , dw_w_t_sc_pc_pcb.primary_category \
-            , dw_w_t_sc_pc_pcb.primary_category_bucket \
-            , dw_w_t_sc_pc_pcb.primary_category_id \
-            , dw_w_t_sc_pc_pcb.secondary_category \
-            , dw_w_t_sc_pc_pcb.secondary_category_id \
-            , dw_w_t_sc_pc_pcb.sc_week_spend \
-            , scma.moving_avg \
-        FROM \
-            (SELECT \
-                dw_year_number as year_number \
-                , dw_week_number as week_number \
-                , primary_category \
-                , primary_category_bucket \
-                , primary_category_id \
-                , secondary_category \
-                , secondary_category_id \
-                , CASE \
-                    WHEN weekly_spend is NULL then 0 \
-                    ELSE weekly_spend \
-                    END as sc_week_spend \
-            FROM \
-                (%s) sum_weekly_spend) as dw_w_t_sc_pc_pcb \
-        INNER JOIN \
-            sc_moving_avg as scma \
-        ON \
-            dw_w_t_sc_pc_pcb.year_number = scma.year_number \
-            AND dw_w_t_sc_pc_pcb.week_number = scma.week_number \
-            AND dw_w_t_sc_pc_pcb.secondary_category_id = scma.secondary_category_id \
-    " % sum_weekly_spend_string                
-
-    return query_string
 
 def w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+    # Get spend by week alongside moving average by secondary category
     
     # Determine if we should filter out an individual's spending contribution 
     ed_weight, julie_weight = erjs_weights(individual)
+    
+    # Chains
+    #    def scma(startdate, enddate, moving_avg_weeks, individual):
+            #Calculate moving averages for weekly spend by secondary category
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None):
     
     #FUTURE: Pull filter criteria into this function call if necessary
     sc_pc_pcb()
@@ -1249,45 +983,15 @@ def w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
 
     return cursor_execute(query_string)
 
-def qs_b(individual):
-    # Get budget amounts by secondary_category
-    
-    ed_weight, julie_weight = erjs_weights(individual)
-    rockleton_id = Rockleton.objects.filter(user__first_name__icontains=individual)[0].id
-            
-    query_string = " \
-        SELECT \
-            secondary_category_id \
-            , CASE \
-                WHEN amount is NULL then 0 \
-                WHEN time_period = 'WE' then (amount * ed_perc/100 * %s + amount * (1-ed_perc/100) * %s) \
-                ELSE (amount * ed_perc/100 * %s + amount * (1-ed_perc/100) * %s) / 4 \
-                END as sc_budgeted_amount \
-        FROM \
-            (SELECT \
-                rsc.id as secondary_category_id\
-                , rb.time_period \
-                , rb.amount \
-                , rb.ed_perc \
-            FROM \
-                zillions_secondary_category rsc \
-            LEFT JOIN \
-                (SELECT \
-                    * \
-                FROM \
-                    zillions_budget \
-                WHERE \
-                    user_id = %s) rb \
-            ON \
-                rsc.id = rb.secondary_category_id) rsc_rb \
-    " % (ed_weight, julie_weight, ed_weight, julie_weight, rockleton_id)
-
-    return query_string
 
 def b(individual):
     # Get budget amounts by secondary_category
     
     drop_temp_table('b')
+    
+    # FUTURE: This is a hack!!!
+    if individual is None:
+        individual = "ed"
     
     ed_weight, julie_weight = erjs_weights(individual)
     rockleton_id = Rockleton.objects.filter(user__first_name__icontains=individual)[0].id
@@ -1322,148 +1026,67 @@ def b(individual):
 
     return cursor_execute(query_string)
 
-def qs_b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
 
-    # Get weekly spend alongside moving average
-    w_scma_t_sc_pc_pcb_string = qs_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual)
-    b_string = qs_b(individual)
+def b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual, primary = ""):
+    # Get weekly spend alongside moving average alongside budget amount per secondary category
     
-    query_string = " \
-        SELECT \
-            w_scma_t_sc_pc_pcb.year_number \
-            , w_scma_t_sc_pc_pcb.week_number \
-            , w_scma_t_sc_pc_pcb.primary_category \
-            , w_scma_t_sc_pc_pcb.primary_category_id \
-            , w_scma_t_sc_pc_pcb.primary_category_bucket \
-            , w_scma_t_sc_pc_pcb.secondary_category \
-            , w_scma_t_sc_pc_pcb.secondary_category_id \
-            , round(w_scma_t_sc_pc_pcb.sc_week_spend,2) as sc_week_spend \
-            , round(b.sc_budgeted_amount,2) as sc_budgeted_amount \
-            , w_scma_t_sc_pc_pcb.moving_avg as sc_moving_avg \
-            , round(((b.sc_budgeted_amount - w_scma_t_sc_pc_pcb.sc_week_spend)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining \
-            , round(((b.sc_budgeted_amount - w_scma_t_sc_pc_pcb.moving_avg)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining_moving_avg \
-        FROM \
-            (%s) w_scma_t_sc_pc_pcb \
-        INNER JOIN \
-            (%s) b \
-        ON w_scma_t_sc_pc_pcb.secondary_category_id = b.secondary_category_id \
-        ORDER BY \
-            w_scma_t_sc_pc_pcb.primary_category_bucket \
-            , w_scma_t_sc_pc_pcb.primary_category \
-            , w_scma_t_sc_pc_pcb.secondary_category \
-            , w_scma_t_sc_pc_pcb.year_number, w_scma_t_sc_pc_pcb.week_number \
-    " % (w_scma_t_sc_pc_pcb_string, b_string)
-    #cursor_execute(query_string)        
-    #query="SELECT * FROM b"
-    #sql_tuple = execute_query(query)
-    #print sql_tuple
-    #print "here"
-    return query_string
-
-def b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
-
+    # Chain:
+    #def w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+    #    sc_pc_pcb()
+    #    def scma(startdate, enddate, moving_avg_weeks, individual):
+    #        #Calculate moving averages for weekly spend by secondary category
+    #def b(individual):
+    
     # Get weekly spend alongside moving average
     w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual)
     b(individual)
+    
+    if primary is not "":
+        primary = "WHERE primary_category = '" + primary + "'"
+        
     
     drop_temp_table('b_w_scma_t_sc_pc_pcb')
     
     query_string = " \
         CREATE TEMPORARY TABLE b_w_scma_t_sc_pc_pcb AS ( \
                 SELECT \
-                    w_scma_t_sc_pc_pcb.year_number \
-                    , w_scma_t_sc_pc_pcb.week_number \
-                    , w_scma_t_sc_pc_pcb.primary_category \
-                    , w_scma_t_sc_pc_pcb.primary_category_id \
-                    , w_scma_t_sc_pc_pcb.primary_category_bucket \
-                    , w_scma_t_sc_pc_pcb.secondary_category \
-                    , w_scma_t_sc_pc_pcb.secondary_category_id \
-                    , round(w_scma_t_sc_pc_pcb.sc_week_spend,2) as sc_week_spend \
+                    f_w_scma_t_sc_pc_pcb.year_number \
+                    , f_w_scma_t_sc_pc_pcb.week_number \
+                    , f_w_scma_t_sc_pc_pcb.primary_category \
+                    , f_w_scma_t_sc_pc_pcb.primary_category_id \
+                    , f_w_scma_t_sc_pc_pcb.primary_category_bucket \
+                    , f_w_scma_t_sc_pc_pcb.secondary_category \
+                    , f_w_scma_t_sc_pc_pcb.secondary_category_id \
+                    , round(f_w_scma_t_sc_pc_pcb.sc_week_spend,2) as sc_week_spend \
                     , round(b.sc_budgeted_amount,2) as sc_budgeted_amount \
-                    , w_scma_t_sc_pc_pcb.moving_avg as sc_moving_avg \
-                    , round(((b.sc_budgeted_amount - w_scma_t_sc_pc_pcb.sc_week_spend)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining \
-                    , round(((b.sc_budgeted_amount - w_scma_t_sc_pc_pcb.moving_avg)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining_moving_avg \
+                    , f_w_scma_t_sc_pc_pcb.moving_avg as sc_moving_avg \
+                    , round(((b.sc_budgeted_amount - f_w_scma_t_sc_pc_pcb.sc_week_spend)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining \
+                    , round(((b.sc_budgeted_amount - f_w_scma_t_sc_pc_pcb.moving_avg)/b.sc_budgeted_amount)*100,1) as sc_perc_remaining_moving_avg \
                 FROM \
-                    w_scma_t_sc_pc_pcb \
+                    (SELECT * FROM w_scma_t_sc_pc_pcb %s) f_w_scma_t_sc_pc_pcb \
                 INNER JOIN \
                     b \
-                ON w_scma_t_sc_pc_pcb.secondary_category_id = b.secondary_category_id \
+                ON f_w_scma_t_sc_pc_pcb.secondary_category_id = b.secondary_category_id \
                 ORDER BY \
-                    w_scma_t_sc_pc_pcb.primary_category_bucket \
-                    , w_scma_t_sc_pc_pcb.primary_category \
-                    , w_scma_t_sc_pc_pcb.secondary_category \
-                    , w_scma_t_sc_pc_pcb.year_number, w_scma_t_sc_pc_pcb.week_number \
+                    f_w_scma_t_sc_pc_pcb.primary_category_bucket \
+                    , f_w_scma_t_sc_pc_pcb.primary_category \
+                    , f_w_scma_t_sc_pc_pcb.secondary_category \
+                    , f_w_scma_t_sc_pc_pcb.year_number, f_w_scma_t_sc_pc_pcb.week_number \
             ); \
-            "
-    #cursor_execute(query_string)        
-    #query="SELECT * FROM b"
-    #sql_tuple = execute_query(query)
-    #print sql_tuple
-    #print "here"
+            " % primary
+
     return cursor_execute(query_string)
 
-def qs_tot_w_pc(individual):
-    
-    # Get all the transactions. Yes, ALL
-    t_sc_pc_pcb_string = qs_t_sc_pc_pcb()
-    
-    ed_weight, julie_weight = erjs_weights(individual)
-            
-    # Get sum of transactions by primary category alongside weekly spend / budgets grouped by primary category as well
-    query_string = " \
-        SELECT \
-            w_pc_b_w_scma_t_sc_pc_pcb.year_number \
-            , w_pc_b_w_scma_t_sc_pc_pcb.week_number \
-            , w_pc_b_w_scma_t_sc_pc_pcb.primary_category \
-            , w_pc_b_w_scma_t_sc_pc_pcb.primary_category_bucket \
-            , w_pc_b_w_scma_t_sc_pc_pcb.primary_category_id \
-            , round(w_pc_b_w_scma_t_sc_pc_pcb.pc_week_spend,2) as pc_week_spend \
-            , round(w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount,2) as pc_budgeted_amount \
-            , round(tot_t_sc_pc_pcb.pc_total_surplus,2) as pc_total_surplus \
-            , round(w_pc_b_w_scma_t_sc_pc_pcb.pc_moving_avg,2) as pc_moving_avg \
-            , round((tot_t_sc_pc_pcb.pc_total_surplus / w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount),1) as pc_surplus_multiples_of_budget \
-            , round(((w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount - w_pc_b_w_scma_t_sc_pc_pcb.pc_week_spend)/w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount)*100,1) as pc_perc_remaining \
-            , round(((w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount - w_pc_b_w_scma_t_sc_pc_pcb.pc_moving_avg)/w_pc_b_w_scma_t_sc_pc_pcb.pc_budgeted_amount)*100,1) as pc_perc_remaining_moving_avg \
-        FROM \
-            (SELECT \
-                b_w_scma_t_sc_pc_pcb.year_number \
-                , b_w_scma_t_sc_pc_pcb.week_number \
-                , b_w_scma_t_sc_pc_pcb.primary_category \
-                , b_w_scma_t_sc_pc_pcb.primary_category_id \
-                , b_w_scma_t_sc_pc_pcb.primary_category_bucket \
-                , sum(b_w_scma_t_sc_pc_pcb.sc_week_spend) as pc_week_spend \
-                , sum(b_w_scma_t_sc_pc_pcb.sc_budgeted_amount) as pc_budgeted_amount \
-                , sum(b_w_scma_t_sc_pc_pcb.sc_moving_avg) as pc_moving_avg \
-            FROM \
-                (%s) b_w_scma_t_sc_pc_pcb \
-            GROUP BY \
-                b_w_scma_t_sc_pc_pcb.year_number \
-                , b_w_scma_t_sc_pc_pcb.week_number \
-                , b_w_scma_t_sc_pc_pcb.primary_category_id) w_pc_b_w_scma_t_sc_pc_pcb \
-        INNER JOIN \
-            (SELECT \
-                primary_category_id \
-                , sum(ed_signed_amount) * %s + sum(julie_signed_amount) * %s as pc_total_surplus \
-            FROM \
-                (%s) t_sc_pc_pcb \
-            GROUP BY \
-                primary_category_id) tot_t_sc_pc_pcb \
-        ON \
-            w_pc_b_w_scma_t_sc_pc_pcb.primary_category_id = tot_t_sc_pc_pcb.primary_category_id \
-        ORDER BY \
-            w_pc_b_w_scma_t_sc_pc_pcb.primary_category_bucket \
-            , w_pc_b_w_scma_t_sc_pc_pcb.primary_category \
-            , w_pc_b_w_scma_t_sc_pc_pcb.year_number, w_pc_b_w_scma_t_sc_pc_pcb.week_number \
-    " % (b_w_scma_t_sc_pc_pcb_string, ed_weight, julie_weight, t_sc_pc_pcb_string)
-            
-    #cursor_execute(query_string)        
-    #query="SELECT * FROM tot_w_pc"
-    #sql_tuple = execute_query(query)
-    #print sql_tuple
-    
-    return cursor_execute(query_string)
+
 
 def tot_w_pc(individual):
+    # Get sum of transactions by primary category alongside weekly spend / budgets grouped by primary category as well
+    
+    # Chains:
+    #def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None):
     
     # Get all the transactions. Yes, ALL
     t_sc_pc_pcb()
@@ -1471,7 +1094,7 @@ def tot_w_pc(individual):
     
     ed_weight, julie_weight = erjs_weights(individual)
             
-    # Get sum of transactions by primary category alongside weekly spend / budgets grouped by primary category as well
+    
     query_string = " \
         CREATE TEMPORARY TABLE tot_w_pc AS ( \
             SELECT \
@@ -1520,10 +1143,6 @@ def tot_w_pc(individual):
             ); \
             " % (ed_weight, julie_weight)
             
-    #cursor_execute(query_string)        
-    #query="SELECT * FROM tot_w_pc"
-    #sql_tuple = execute_query(query)
-    #print sql_tuple
     
     return cursor_execute(query_string)
 
@@ -1539,6 +1158,31 @@ def convert_to_float(var):
 #@csrf_exempt
 def q_budget_view_json(request):
     # Send spend summary to view using javascript
+    # spend vs budget per week for every SC / PC along with moving averages
+    
+    # Chains:
+    #def b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+        # Get weekly spend alongside moving average
+    #    def w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+    #        def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #            def pc_pcb(bucket_name, primary_names)
+    #                def pcb(bucket_name = None):
+    #        def scma(startdate, enddate, moving_avg_weeks, individual):
+    #            #Calculate moving averages for weekly spend by secondary category
+    #    def b(individual):
+    
+    #def tot_w_pc(individual):
+    #    def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
+    #        def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #            def pc_pcb(bucket_name, primary_names)
+    #                def pcb(bucket_name = None):
+    
+    # Chains:
+    #def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None):
+    
 
     # Not putting try/except here because the view sends start and end values to the template
     # The views.py sends the parameters to the template. But this view is called from the javascript, so the try's shouldn't be needed
@@ -1636,6 +1280,8 @@ def q_budget_view_json(request):
 #@csrf_exempt
 def q_budget_summary_json(individual):
     #Double of q_ed_primary_buckets() to get extra data
+    # This is for the index page
+    # balance per PC along with current week's spend vs budget
     
     # I would prefer to make queries using django's terminology
     # But I need to do some data transformations before I aggregate
@@ -1650,171 +1296,111 @@ def q_budget_summary_json(individual):
     # Collection Secondary Category ids to join to transactions
     # Collect Primary Category Names
     # Collect Primary Category buckets
-    bucket_name = None
-    primary_names = None
-    secondary_names = None
-
-    sc_pc_pcb(bucket_name, primary_names, secondary_names)
     
-    if bucket_name is not None:
-        bucket_name = split_list(bucket_name,'name')
-    else:
-        bucket_name = ''
-        
-
-    q_pcb = """
-        SELECT
-            *
-        FROM
-            zillions_primary_category_bucket
-        %s""" % bucket_name
-            
-    if primary_names:
-        primary_names = split_list(primary_names,'pc.name')
-    else:
-        primary_names = ''
+    # Chains
+    #def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None)
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None) 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None)
+    
+    t_sc_pc_pcb(individual = individual)  
     
     ed_weight, julie_weight = erjs_weights(individual)
-
-    q_pc_pcb = """
-        SELECT
-            pc.id as primary_category_id
-            , pc.name as primary_category
-            , pcb.name as primary_category_bucket
-        FROM
-            (SELECT
-               *
-             FROM
-               zillions_primary_category
-             WHERE
-               show_julie = 1 OR show_julie = 1 * %s) pc
-        INNER JOIN
-            (%s) pcb
-        ON
-            pc.category_id = pcb.id
-        %s""" % (julie_weight, q_pcb, primary_names)
-        
-    if secondary_names:
-        secondary_names = split_list(secondary_names,'sc.name')
-    else:
-        secondary_names = ''
-        
-    q_sc_pc_pcb = """
-        SELECT
-            sc.id as secondary_category_id
-            , sc.name as secondary_category
-            , pc_pcb.primary_category
-            , pc_pcb.primary_category_id
-            , pc_pcb.primary_category_bucket
-        FROM
-            zillions_secondary_category sc
-        INNER JOIN
-            (%s) pc_pcb
-        ON
-            sc.primary_category_id = pc_pcb.primary_category_id
-        %s""" % (q_pc_pcb, secondary_names)
-        
-    #individual = 'ed'
     
-        
-    q_t_pc_pcb = """
-        SELECT
-            sc_pc_pcb.primary_category
-            , sc_pc_pcb.primary_category_id
-            , sc_pc_pcb.primary_category_bucket
-            , round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1-t.ed_perc/100) * %s),2) as signed_amount
-        FROM
-            zillions_transaction t
-        INNER JOIN
-            (%s) sc_pc_pcb
-        ON
-            t.secondary_category_id = sc_pc_pcb.secondary_category_id
-        GROUP BY 1,2,3
-        """ % (ed_weight, julie_weight, q_sc_pc_pcb)
-        
+    # Get balance per PC
+    query_string = """
+        CREATE TEMPORARY TABLE q_t_pc_pcb as (
+            SELECT
+                primary_category
+                , primary_category_id
+                , primary_category_bucket
+                , round(sum(ed_signed_amount * %s + julie_signed_amount * %s),2) as signed_amount
+            FROM
+                t_sc_pc_pcb
+            GROUP BY 1,2,3);
+        """ % (ed_weight, julie_weight)
+    cursor_execute(query_string)
+    
     dt = date.today()
     first_day_of_current_week = dt - timedelta(days=(dt.weekday() + 1) % 7)
+    
+    t_sc_pc_pcb(individual = individual, startdate = first_day_of_current_week, incl_internal_transfer = 0)
+    
+    sc_pc_pcb()
         
-    q_t_pc_pcb_week = """ 
-        SELECT
-            primary_category
-            , primary_category_id
-            , primary_category_bucket
-            , CASE
-                WHEN cw_spend is null then 0
-                WHEN cw_spend is not null then cw_spend
-                END as cw_spend
-        FROM
-            (SELECT 
-                sc_pc_pcb.primary_category 
-                , sc_pc_pcb.primary_category_id 
-                , sc_pc_pcb.primary_category_bucket 
-                , round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1 - t.ed_perc/100) * %s),2) as cw_spend 
-            FROM 
+    # Get current week spend per PC
+    query_string = """ 
+        CREATE TEMPORARY TABLE q_t_pc_pcb_week as (
+            SELECT
+                primary_category
+                , primary_category_id
+                , primary_category_bucket
+                , CASE
+                    WHEN cw_spend is null then 0
+                    WHEN cw_spend is not null then cw_spend
+                    END as cw_spend
+            FROM
                 (SELECT 
-                   *
+                    sc_pc_pcb.primary_category 
+                    , sc_pc_pcb.primary_category_id 
+                    , sc_pc_pcb.primary_category_bucket 
+                    , round(sum(ed_signed_amount * %s + julie_signed_amount * %s),2) as cw_spend 
                  FROM
-                   zillions_transaction
-                 WHERE
-                   transaction_date >= '%s'
-                   AND internal_transfer = 0) t 
-            RIGHT JOIN 
-                (%s) sc_pc_pcb 
-            ON 
-                t.secondary_category_id = sc_pc_pcb.secondary_category_id 
-            GROUP BY 1,2,3) tbl
-        """ % (ed_weight, julie_weight, first_day_of_current_week, q_sc_pc_pcb)
+                    t_sc_pc_pcb
+                RIGHT JOIN 
+                    sc_pc_pcb 
+                ON 
+                    t_sc_pc_pcb.secondary_category_id = sc_pc_pcb.secondary_category_id 
+                 GROUP BY 1,2,3) tbl);
+        """ % (ed_weight, julie_weight)
+    cursor_execute(query_string)
 
     #print q_t_pc_pcb_week
     
-    rockleton_id = Rockleton.objects.filter(user__first_name__icontains=individual)[0].id
+    #rockleton_id = Rockleton.objects.filter(user__first_name__icontains=individual)[0].id
+    b(individual)
             
-    q_b_pc_pcb = """
-        SELECT
-            primary_category
-            , primary_category_id
-            , round(sum(sc_budgeted_amount),2) as pc_budgeted_amount
-        FROM
-            (SELECT
-                 sc_pc_pcb.primary_category
-                 , sc_pc_pcb.primary_category_id
-                 , CASE
-                     WHEN rb.amount is NULL then 0
-                     WHEN rb.time_period = 'WE' then (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s)
-                     ELSE (rb.amount * rb.ed_perc/100 * %s + rb.amount * (1-rb.ed_perc/100) * %s) / 4
-                     END as sc_budgeted_amount
-             FROM
-                 (%s) sc_pc_pcb
-             LEFT JOIN
-                 (SELECT
-                     *
+    # Get budget per PC
+    query_string = """
+        CREATE TEMPORARY TABLE q_b_pc_pcb as (
+            SELECT
+                primary_category
+                , primary_category_id
+                , round(sum(sc_budgeted_amount),2) as pc_budgeted_amount
+            FROM
+                (SELECT
+                     primary_category
+                     , primary_category_id
+                     , sc_budgeted_amount
                  FROM
-                     zillions_budget
-                 WHERE
-                     user_id = %s) rb
-             ON
-                 sc_pc_pcb.secondary_category_id = rb.secondary_category_id) b_sc_pc_pcb
-        GROUP BY 1,2
-        """ % (ed_weight, julie_weight, ed_weight, julie_weight, q_sc_pc_pcb, rockleton_id)
+                     sc_pc_pcb
+                 LEFT JOIN
+                     b
+                 ON
+                     sc_pc_pcb.secondary_category_id = b.secondary_category_id) b_sc_pc_pcb
+            GROUP BY 1,2);
+        """
+    cursor_execute(query_string)
     
+    # Grand JOIN
     q_b_t_pc_pcb = """
         SELECT
-            t_pc_pcb.primary_category
-            , t_pc_pcb.primary_category_bucket
-            , b_pc_pcb.pc_budgeted_amount
-            , t_pc_pcb.signed_amount
-            , t_pc_pcb_week.cw_spend + b_pc_pcb.pc_budgeted_amount as signed_amount_current_week
+            q_t_pc_pcb.primary_category
+            , q_t_pc_pcb.primary_category_bucket
+            , q_b_pc_pcb.pc_budgeted_amount
+            , q_t_pc_pcb.signed_amount
+            , q_t_pc_pcb_week.cw_spend + q_b_pc_pcb.pc_budgeted_amount as signed_amount_current_week
         FROM
-            (%s) b_pc_pcb
+            q_b_pc_pcb
         INNER JOIN
-            (%s) t_pc_pcb
+            q_t_pc_pcb
         ON
-            b_pc_pcb.primary_category_id = t_pc_pcb.primary_category_id
+            q_b_pc_pcb.primary_category_id = q_t_pc_pcb.primary_category_id
         INNER JOIN
-            (%s) t_pc_pcb_week
+            q_t_pc_pcb_week
         ON
-            b_pc_pcb.primary_category_id = t_pc_pcb_week.primary_category_id
-        ;""" % (q_b_pc_pcb, q_t_pc_pcb, q_t_pc_pcb_week)
+            q_b_pc_pcb.primary_category_id = q_t_pc_pcb_week.primary_category_id
+        ;"""
         
     #print q_b_t_pc_pcb
     
@@ -1837,17 +1423,27 @@ def q_budget_summary_json(individual):
     return category_totals
 
 def define_summary_json(category_totals, category):
+    # Balance, current week totals, and viz bar definitions per PC
+    
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)] = {}
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["total"] = category.signed_amount
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_total"] = category.signed_amount_current_week
     
+    # Define a budget of 1 if budget = 0
+    # This helps with divide by 0 calcs on the viz bar lengths
     if category.pc_budgeted_amount == 0:
         pragmatic_pc_budgeted_amount = 1
     else:
         pragmatic_pc_budgeted_amount = category.pc_budgeted_amount
     
+    # # length of Red/Very Red and green/very green bars in test ajax budget summary
     bar_params = get_bar_params(pragmatic_pc_budgeted_amount, category.signed_amount)
 
+    # Add data to dictionary for UI consumption for PC balance
+    # bar will either extend left for negative or right for positive
+    # negative = red, positive = green
+    # Each bar needs to know where to start and how long to be
+    # pp = Dark red, nn = dark green. Both indicate extremes of negative or positive
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_color"] = bar_params["bar_color"]
     
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["negative_budget_bar"] = bar_params["negative_budget_bar"]
@@ -1865,6 +1461,7 @@ def define_summary_json(category_totals, category):
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["nn_bar_length"] = bar_params["nn_bar_length"]
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["nn_bar_start"] = bar_params["nn_bar_start"]
     
+    # Add data to dictionary for UI consumption for PC current week balance
     bar_params = get_bar_params(pragmatic_pc_budgeted_amount, category.signed_amount_current_week)
     
     category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["cw_bar_color"] = bar_params["bar_color"]
@@ -1888,8 +1485,9 @@ def define_summary_json(category_totals, category):
     return category_totals
 
 def get_bar_params(budgeted_amount, signed_amount):
+    # length of Red/Very Red and green/very green bars in test ajax budget summary
     if budgeted_amount == 0:
-        # Deprecated
+        # Deprecated because we don't allow budget to = 0
         p_bar_start = 0
         if signed_amount >= 0:
             bar_color = "rgb(0,255,0)"
@@ -1906,9 +1504,13 @@ def get_bar_params(budgeted_amount, signed_amount):
         n_bar_length = 0
         n_bar_start = 0
     else:
+        #if spend is positive
         if signed_amount >= 0:
+            # bar starts in the middle of the range
             p_bar_start = 50
             bar_color = "rgb(0,255,0)"
+            
+            # default the red marker to 0 (out of 100)
             negative_budget_bar = 0
             
             nn_bar_length = 0
@@ -1916,38 +1518,56 @@ def get_bar_params(budgeted_amount, signed_amount):
             n_bar_length = 0
             n_bar_start = 0
 
+            
             if signed_amount >= budgeted_amount:
+                # If overgreen
+                
+                # Calc overall length of all green along with lengths of green/dark green as multiples of the budgeted amount
+                # Determine where to place marker (from 50-100)
                 positive_budget_bar = Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
                 p_bar_length = Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
                 pp_bar_length = 49 - Decimal(budgeted_amount/signed_amount) * Decimal(49) + Decimal(49)
                 pp_bar_start = p_bar_length
             else:
+                
                 #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = Decimal(category.ed_signed_amount/category.pc_budgeted_amount) * Decimal(50)
+                # If signed amount < budgeted amount, put the marker at "100" (99)
                 positive_budget_bar = 99 
+                # The bar length is "50"
                 p_bar_length = Decimal(signed_amount/budgeted_amount) * Decimal(49)
             
+                # No dark green bar
                 pp_bar_length = 0
                 pp_bar_start = 0
 
             
         else:
+            # signed amount is negative, draw green
             bar_color = "rgb(255,0,0)"
+            
+            # positive marker is at "100"
             positive_budget_bar = 99
             
+            # no green bars
             p_bar_start = 0
             p_bar_length = 0
             pp_bar_length = 0
             pp_bar_start = 0
             
             if signed_amount <= -budgeted_amount:
+                # if overred
                 #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_length"] = 50
                 #category_totals[str(category.primary_category_bucket)][str(category.primary_category)]["bar_start"] = 0
+                
+                # Determine where to place marker (from 0-50)
                 negative_budget_bar = 50 - Decimal(-budgeted_amount/signed_amount) * Decimal(50)
+                # determine lengths of red and dark red bars
                 nn_bar_length = 50 - Decimal(-budgeted_amount/signed_amount) * Decimal(50)
                 nn_bar_start = 0
                 n_bar_length = Decimal(-budgeted_amount/signed_amount) * Decimal(50)
                 n_bar_start = nn_bar_length
             else:
+                # If spend isn't over red, put the marker at 0 and calc other legnths
                 n_bar_length = Decimal(-signed_amount/budgeted_amount) * Decimal(50)
                 n_bar_start = 50 - Decimal(-signed_amount/budgeted_amount) * Decimal(50)
                 negative_budget_bar = 0
@@ -1973,81 +1593,350 @@ def get_bar_params(budgeted_amount, signed_amount):
     return bar_params
 
 def q_ed_pc_total(primary_names, individual):
+    # Query balance per specific primary category
     
-    bucket_name = None
-    secondary_names = None
+    # Get transactions given filters
+    t_sc_pc_pcb(primary_names = primary_names, individual = individual)  
     
-    if bucket_name is not None:
-        bucket_name = split_list(bucket_name,'name')
-    else:
-        bucket_name = ''
-    
-    q_pcb = """
-        SELECT
-            *
-        FROM
-            zillions_primary_category_bucket
-        %s""" % bucket_name
-            
-    if primary_names:
-        primary_names = split_list(primary_names,'pc.name')
-    else:
-        primary_names = ''
+    # Chains
+    #def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None)
+    #    def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None) 
+    #        def pc_pcb(bucket_name, primary_names)
+    #            def pcb(bucket_name = None)
     
     ed_weight, julie_weight = erjs_weights(individual)
 
-    q_pc_pcb = """
-        SELECT
-            pc.id as primary_category_id
-            , pc.name as primary_category
-            , pcb.name as primary_category_bucket
-        FROM
-            (SELECT
-               *
-             FROM
-               zillions_primary_category
-             WHERE
-               show_julie = 1 OR show_julie = 1 * %s) pc
-        INNER JOIN
-            (%s) pcb
-        ON
-            pc.category_id = pcb.id
-        %s""" % (julie_weight, q_pcb, primary_names)
-        
-    if secondary_names:
-        secondary_names = split_list(secondary_names,'sc.name')
-    else:
-        secondary_names = ''
-        
-    q_sc_pc_pcb = """
-        SELECT
-            sc.id as secondary_category_id
-            , sc.name as secondary_category
-            , pc_pcb.primary_category
-            , pc_pcb.primary_category_id
-            , pc_pcb.primary_category_bucket
-        FROM
-            zillions_secondary_category sc
-        INNER JOIN
-            (%s) pc_pcb
-        ON
-            sc.primary_category_id = pc_pcb.primary_category_id
-        %s""" % (q_pc_pcb, secondary_names)
-    
-        
     q_pc_t = """
         SELECT
-            round(sum(t.transaction_type * t.amount * t.ed_perc/100 * %s + t.transaction_type * t.amount * (1-t.ed_perc/100) * %s),2) as signed_amount
+            round(sum(ed_signed_amount * %s + julie_signed_amount * %s),2) as signed_amount
         FROM
-            zillions_transaction t
-        INNER JOIN
-            (%s) sc_pc_pcb
-        ON
-            t.secondary_category_id = sc_pc_pcb.secondary_category_id
-        """ % (ed_weight, julie_weight, q_sc_pc_pcb)
+            t_sc_pc_pcb
+        """ % (ed_weight, julie_weight)
         
     sql_tuple = execute_query(q_pc_t)
     
     pc_t = sql_tuple[0].signed_amount
 
     return pc_t
+
+def q_transaction_data_json(request):
+    # get list of transactions per filter as well as spend per certain interval either vs a budget or absolute for all or Ed vs Julie
+    # Show viz given transaction list
+    
+    #Get search parameters from request object
+    try:
+        source = request.GET['source']
+    except:
+        source = None
+        
+    try:
+        secondary = request.GET['secondary']
+    except:
+        secondary = None
+
+    try:
+        primary = request.GET['primary']
+    except:
+        primary = None
+        
+    try:
+        individual = request.GET['individual']
+    except:
+        individual = None
+        
+    try:
+        amount_gte = request.GET['amount_gte']
+    except:
+        amount_gte = None
+    try:
+        amount_lte = request.GET['amount_lte']
+    except:
+        amount_lte = None
+    try:
+        transaction_type = request.GET['transaction_type']
+    except:
+        transaction_type = None
+
+    try:
+        startdate = datetime.strptime(request.GET['startdate'], '%Y%m%d').date()
+    except:
+        # Default to 6 weeks earlier
+        startdate = date.today() - timedelta(days=42)     
+
+    try:
+        enddate = datetime.strptime(request.GET['enddate'], '%Y%m%d').date()
+    except:
+        # Default to today
+        enddate = date.today()
+        
+    try:
+        description = request.GET['description']
+    except:
+        description = ''
+
+    try:
+        incl_internal_transfer = int(request.GET['incl_internal_transfer'])
+    except:
+        incl_internal_transfer = ''
+        
+    try:
+        flagged = int(request.GET['flagged'])
+    except:
+        flagged = ''
+        
+    try:
+        group_by = request.GET['group_by']
+    except:
+        group_by = ''
+        
+    try:
+        interval = request.GET['interval']
+    except:
+        interval = ''
+        
+    #Number of weeks over which to calculate the moving average
+    try:
+        moving_avg_weeks = int(request.GET['moving_avg_weeks'])
+    except:
+        moving_avg_weeks = 6    
+
+    # Calculate start and end dates as of the beginning and end of weeks
+    #REDO this based on the interval parameter. If week, this is fine. If month? year?
+    startdate = startdate - timedelta(days=(startdate.weekday() + 1) % 7)
+    enddate = enddate - timedelta(days=(enddate.weekday() + 1) % 7) + timedelta(days=6)
+    
+    transaction_list = q_transaction_list(primary, 
+                                       secondary,
+                                       source,
+                                       individual,
+                                       startdate,
+                                       enddate,
+                                       description,
+                                       amount_lte,
+                                       amount_gte,
+                                       transaction_type,
+                                       incl_internal_transfer,
+                                       flagged)
+    
+    # Construct SQL query given level of granularity and aggregation required
+    
+    field_string = " \
+        primary_category \
+        , SUM(signed_amount) as signed_amount \
+        , SUM(ed_signed_amount) as ed_signed_amount \
+        , SUM(julie_signed_amount) as julie_signed_amount \
+        , year_number"
+        
+    groupby_string = " \
+        primary_category, year_number"
+    orderby_string = " \
+        ORDER BY year_number DESC"
+            
+    if group_by == "secondary":
+        field_string = field_string + ", secondary_category"
+        groupby_string = groupby_string + ", secondary_category"
+        
+    if interval == "week":
+        field_string = field_string + ", week_number"
+        groupby_string = groupby_string + ", week_number"
+        orderby_string = orderby_string + ", week_number DESC;"
+    elif interval == "month":
+        field_string = field_string + ", MONTH(transaction_date) as month_number"
+        groupby_string = groupby_string = ", month_number"
+        orderby_string = orderby_string + ", month_number DESC;"
+        
+    query_string = "SELECT " + field_string + " FROM transaction_list GROUP BY " + groupby_string + orderby_string
+
+    sql_tuple = execute_query(query_string)
+    
+    viz_transaction_list = []
+    
+    # Create dictionary for returned transactions
+    # This function is deprecated in favor of build_viz() below
+    for row in sql_tuple:
+        transaction = {}
+        
+        transaction['primary_category'] = row.primary_category
+        transaction['signed_amount'] = row.signed_amount
+        transaction['ed_signed_amount'] = row.ed_signed_amount
+        transaction['julie_signed_amount'] = row.julie_signed_amount
+        transaction['year_number'] = row.year_number
+        
+        if group_by == "secondary":
+            transaction['secondary_category'] = row.secondary_category
+        if interval == "week":
+            transaction['week_number'] = row.week_number
+        elif  interval == "month":
+            transaction['month_number'] = row.month_number
+        viz_transaction_list.append(transaction)
+        
+    # Get table in format consumable by D3
+    viz_transaction_list = build_viz(startdate, enddate, moving_avg_weeks, individual, primary, secondary)
+    
+    transaction_data = [transaction_list, viz_transaction_list]
+
+    # pass json to the UI
+    json_data = json.dumps(transaction_data, cls=DjangoJSONEncoder)
+
+    return HttpResponse(json_data,'application/json')
+
+def build_viz(startdate, enddate, moving_avg_weeks, individual, primary, secondary):
+    # get spend per certain interval either vs a budget or absolute for all or Ed vs Julie
+    
+    # Chains:
+    #def b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+        # Get weekly spend alongside moving average
+    #    def w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual):
+    #        def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #            def pc_pcb(bucket_name, primary_names)
+    #                def pcb(bucket_name = None):
+    #        def scma(startdate, enddate, moving_avg_weeks, individual):
+    #            #Calculate moving averages for weekly spend by secondary category
+    #    def b(individual):
+    
+    #def tot_w_pc(individual):
+    #    def t_sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None, startdate = None, enddate = None, description = '', amount_lte = None, amount_gte = None, transaction_type = None, individual = None, incl_internal_transfer = 1, flagged = None):
+    #        def sc_pc_pcb(bucket_name = None, primary_names = None, secondary_names = None): 
+    #            def pc_pcb(bucket_name, primary_names)
+    #                def pcb(bucket_name = None):
+    
+    # Get secondary category spend / moving average vs budget
+    b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, individual, primary)
+    # Get primary category surplus and aggregate over secondary categories
+    tot_w_pc(individual)
+    
+    query_string = "SELECT * FROM b_w_scma_t_sc_pc_pcb;"
+    #SC-level detail
+    sc_sql_tuple = execute_query(query_string)
+    
+    query_string = "SELECT * FROM tot_w_pc;"
+    #PC-level detail
+    pc_sql_tuple = execute_query(query_string)
+    
+    if individual is None:
+        # if not pulling total, split spend by Ed and Julie amounts 
+        individual_list = ['ed','julie']
+        specific_sc_sql_tuple = {}
+        specific_pc_sql_tuple = {}
+        for person in individual_list:
+            # get spend vs budget and absolute by person
+            drop_temp_table('b_w_scma_t_sc_pc_pcb')
+            drop_temp_table('tot_w_pc')
+            # Get secondary category spend / moving average vs budget
+            b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, person, primary)
+            # Get primary category surplus and aggregate over secondary categories
+            tot_w_pc(person)
+        
+            query_string = "SELECT * FROM b_w_scma_t_sc_pc_pcb;"
+            #SC-level detail
+            specific_sc_sql_tuple[person] = execute_query(query_string)
+        
+            query_string = "SELECT * FROM tot_w_pc;"
+            #PC-level detail
+            specific_pc_sql_tuple[person] = execute_query(query_string)
+
+    viz_transaction_list = []
+
+    if secondary is not None:
+        # if secondary transaction granularity is needed, build table
+        for index, row in enumerate(sc_sql_tuple): 
+            if row.secondary_category == secondary:
+                transaction = {}
+                
+                transaction['week_number'] = "Week " + str(row.week_number)
+                transaction['primary_category'] = str(row.primary_category)
+                transaction['secondary_category'] = str(row.secondary_category)
+                transaction['week_spend'] = convert_to_float(row.sc_week_spend)
+                transaction['moving_avg'] = convert_to_float(row.sc_moving_avg)
+                
+                # split by individual if necessary
+                if individual is None:
+                    transaction['ed_week_spend'] = convert_to_float(specific_sc_sql_tuple['ed'][index].sc_week_spend)
+                    transaction['julie_week_spend'] = convert_to_float(specific_sc_sql_tuple['julie'][index].sc_week_spend)
+                
+                transaction['budgeted_amount'] = row.sc_budgeted_amount
+                transaction['perc_remaining'] = round_viz(convert_to_float(row.sc_perc_remaining/100),1)
+                transaction['perc_remaining_moving_avg'] = round_viz(convert_to_float(row.sc_perc_remaining_moving_avg/100),1)
+
+                viz_transaction_list.append(transaction)
+    else:
+        sc_pivot_data = pivot_sc()
+
+        # if secondary transaction granularity isn't needed, build table for PCs
+        for index, row in enumerate(pc_sql_tuple): 
+            if row.primary_category == primary:
+                
+                transaction = {}
+                
+                transaction['week_number'] = "Week " + str(row.week_number)
+                transaction['primary_category'] = str(row.primary_category)
+                transaction['week_spend'] = convert_to_float(row.pc_week_spend)
+                transaction['moving_avg'] = convert_to_float(row.pc_moving_avg)
+                
+                # split by individual if necessary
+                if individual is None:
+                    transaction['ed_week_spend'] = convert_to_float(specific_pc_sql_tuple['ed'][index].pc_week_spend)
+                    transaction['julie_week_spend'] = convert_to_float(specific_pc_sql_tuple['julie'][index].pc_week_spend)
+                    
+                transaction['budgeted_amount'] = row.pc_budgeted_amount
+                transaction['perc_remaining'] = round_viz(convert_to_float(row.pc_perc_remaining/100),1)
+                transaction['perc_remaining_moving_avg'] = round_viz(convert_to_float(row.pc_perc_remaining_moving_avg/100),1)
+                
+                for field in sc_pivot_data[index]._fields:
+                    if field not in ['year_number','week_number','primary_category']:
+                        transaction[field] = getattr(sc_pivot_data[index], field)
+                
+                
+                viz_transaction_list.append(transaction)
+                
+
+
+    return viz_transaction_list
+
+def round_viz(value, max):
+    # Scale for visual purposes
+    if abs(value) > max:
+        if value < 0:
+            value = -max
+        else:
+            value = max
+    return value
+
+def pivot_sc():
+    #prerequisite: b_w_scma_t_sc_pc_pcb(startdate, enddate, moving_avg_weeks, person)
+    
+    query_string = """
+        SET @sql = NULL;
+        SET @@group_concat_max_len = 32000;
+        """
+    cursor_execute(query_string)
+    
+    query_string = """
+        SELECT
+          GROUP_CONCAT(DISTINCT
+            CONCAT(
+              'SUM(IF(secondary_category = ''',
+              secondary_category,
+              ''', sc_week_spend,0)) AS ',
+              replace(replace(replace(secondary_category, ' ', ''), '&',''), '/','')
+            )
+          ) INTO @sql
+        from b_w_scma_t_sc_pc_pcb;
+        """
+    cursor_execute(query_string)
+    
+    query_string = """
+        SET @sql = CONCAT('SELECT year_number, week_number, primary_category,', @sql, ' FROM b_w_scma_t_sc_pc_pcb group by 1,2,3 order by primary_category, year_number, week_number');
+        """
+    cursor_execute(query_string)
+    
+    query_string = """
+        PREPARE stmt FROM @sql;
+        """
+    cursor_execute(query_string)
+    
+    query_string = """
+        EXECUTE stmt;
+        """
+        
+    return execute_query(query_string) 

@@ -9,4 +9,5 @@ def abs_filter(value):
 
 @register.filter(name='urlname')
 def get_urlname(value):
-    return urllib.quote(value)    
+    return urllib.quote(value).replace("/&amp;/g", "&")
+

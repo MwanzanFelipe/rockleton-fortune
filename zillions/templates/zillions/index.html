@@ -53,9 +53,11 @@
 
       <div class="mdl-cell mdl-cell--3-col mdl-card mdl-shadow--2dp">
         <div class="mdl-card__supporting-text">
-          <a href = {% url 'test' %}>Test View</a>
+          <a href = {% url 'test' %}>Test View</a><br>
+          <a href = {% url 'viz_transaction_list' %}?individual={{ user.first_name|lower }}&primary=Food%20%26%20Dining&startdate=20161002&enddate=20161217&incl_internal_transfer=0&group_by=primary>Visual Transaction List Test View</a>
         </div>
       </div>
+      
 
       <!-- Show one-time only notification messages -->
       {% if messages %}
@@ -218,9 +220,10 @@
       
       <div class="mdl-cell mdl-cell--3-col mdl-card mdl-card--border mdl-shadow--2dp">
         <div class="mdl-card__supporting-text">
-          <b>Budget Totals</b><br>
-          Wedding Fund: ${{ wedding_total }}<br>
-          Moving Account: ${{ moving_account_total }}<br>
+          <b>Special Budget Totals</b><br>
+          Kids Fund: ${{ kids_total }}<br>
+
+          
         </div>
       </div>	
 

@@ -22,6 +22,18 @@
     			border: 1px solid black;
     			border-collapse: collapse;
 			}
+			
+			tr:nth-child(even) {background-color: #f2f2f2}
+			tr:hover {background-color: #e6e6e6}
+			
+			tr.same_amount {background-color: #ffff00}
+			tr.same_amount:hover {background-color: #cccc00}
+			
+			tr.same_description {background-color: #ffffaa}
+			tr.same_description:hover {background-color: #cece88}
+
+			
+			
 		</style>
 	</head>
 
@@ -99,7 +111,15 @@
 								<td>{{ transaction.0.source }}</td>
 							</tr>
 							{% for dupe_transaction in transaction.1 %}
-								<tr>
+								{% if dupe_transaction.amount == transaction.0.amount %}
+									<tr class="same_amount">
+								{% else %}
+									{% if dupe_transaction.description == transaction.0.description %}
+										<tr class="same_description">
+									{% else %}
+										<tr>
+									{% endif %}
+								{% endif %}
 									<td><input type="radio" name=transaction_{{ transaction.0.id }} value="t_{{ dupe_transaction.id }}" /></td>
 									<td>{{ dupe_transaction.transaction_date }}</td>
 									<td>{{ dupe_transaction.description }}</td>

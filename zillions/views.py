@@ -3,13 +3,17 @@ from django.template import RequestContext, loader, Library
 from itertools import chain
 from operator import attrgetter
 from datetime import datetime, timedelta, date
+import time
 from collections import OrderedDict as SortedDict
 from django.contrib import messages
 import copy
 import csv
+import os
+import subprocess
 from decimal import *
 from django.db.models import Sum, Count, F, Q
 from django.shortcuts import render_to_response, get_object_or_404, redirect
+
 
 from django.views.generic import CreateView, UpdateView
 
@@ -50,11 +54,10 @@ def index(request):
     
     wedding_total = q_ed_pc_total('Wedding Fund','ed')
     moving_account_total = q_ed_pc_total('Moving Account','ed')
-    julie_amortization_total = q_julie_amortization_total()
 
-    
-    
-    
+    kids_total = q_ed_pc_total('Kids','ed')
+    julie_amortization_total = q_julie_amortization_total()
+        
     #Flagged Count
     flagged = q_transaction_list(primary = None, 
                                        secondary = None,
@@ -79,6 +82,7 @@ def index(request):
         'flagged' : flagged,
         'wedding_total' : wedding_total,
         'moving_account_total' : moving_account_total,
+        'kids_total' : kids_total,
         'julie_amortization_total' : julie_amortization_total,
         'test_cat_totals' : test_cat_totals
     })
@@ -147,7 +151,7 @@ def weekly_reup(request):
         transaction.mint_import = 0
         transaction.internal_transfer = 1
         transaction.save()
-    
+
     #Record date of last reup
     if reup_delta > 0:
         bckgrnd_calcs.last_week_updated = current_week_number
@@ -578,6 +582,27 @@ class UpdateTransactionView(UpdateView):
 
 
 def export_csv(request):
+    #datetime.strptime(request.GET['startdate'], '%Y%m%d').date()
+    datestamp = date.today().strftime('%Y%m%d')
+    dumpcmd = "/usr/local/mysql/bin/mysqldump -u root rockletonfortune > rockletonfortune%s.out" % (datestamp)
+    #os.system(dumpcmd)
+    subprocess.Popen(dumpcmd, shell=True)
+    
+    time.sleep(2)    # pause 2 seconds
+    f1 = open('/Users/edrogers/Documents/development/rockletonfortune%s.out' % (datestamp), 'r')
+    f2 = open('/Users/edrogers/Documents/development/rockletonfortune%sa.out' % (datestamp), 'w')
+    for line in f1:
+        f2.write(line.replace('datetime(6)', 'datetime'))
+    f1.close()
+    f2.close()
+    
+    template = loader.get_template('zillions/pythonanywhere.html')
+    context = RequestContext(request, {})
+    return HttpResponse(template.render(context))
+
+    #return redirect('index')
+
+    """ DEPRECATED
 
     source = None
     secondary = None
@@ -647,6 +672,7 @@ def export_csv(request):
         writer.writerow([transaction_list[i]['transaction_date'], transaction_list[i]['description'], -1 * transaction_list[i]['signed_amount'], transaction_list[i]['primary_category'], transaction_list[i]['primary_category_category'], transaction_list[i]['source_name'], transaction_list[i]['ed_perc']/100, transaction_list[i]['julie_perc']/100, -1 *  transaction_list[i]['julie_signed_amount'], str(transaction_list[i]['year_number']) + ' - Week Number ' + str(transaction_list[i]['week_number']), '', '', '', '', ''])
 
     return response
+    """
 
 
 def create_budget_universe(post, files):
@@ -813,7 +839,7 @@ def transfer_amount(request):
         # check whether it's valid:
         if formset.is_valid() and form.is_valid():
             
-            print request.POST
+            #print request.POST
             i=0
             for formclip in formset:
                 new_transaction = Transaction()
@@ -859,9 +885,20 @@ def transfer_amount(request):
 
 def testview(request, variable="here"):
     test = variable
-    cat_tot = q_budget_summary_json()
+    individual = request.user.first_name.lower()
+    cat_tot = q_budget_summary_json(individual)
     template = loader.get_template('zillions/test2.html')
     context = RequestContext(request, {
         'test': test
     })
+    return HttpResponse(template.render(context))
+
+def viz_transaction_list(request):
+    
+    
+    template = loader.get_template('zillions/viz_transaction_list.html')
+    context = RequestContext(request, {
+
+    })
+    
     return HttpResponse(template.render(context))

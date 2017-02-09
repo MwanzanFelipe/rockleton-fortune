@@ -19,6 +19,8 @@ urlpatterns = [
     url(r'^$', login_required(views.index), name='index'),
     
     # Show list of transactions
+    url(r'ajax/transactions/$', login_required(z_queries.q_transaction_data_json), name='q_transaction_data_json'),
+    url(r'transactions/viz/$', login_required(views.viz_transaction_list), name = 'viz_transaction_list'),
     url(r'transactions/$', login_required(views.transaction_list), name = 'transaction_list'),
     
     # Add new transactions
@@ -44,6 +46,7 @@ urlpatterns = [
     url('ajax/budget/$', login_required(z_queries.q_budget_view_json), name='q_budget_view_json'),
     #Template to show weekly spend summary per secondary and primary categories
     url(r'budget/$', login_required(views.budget_view), name = 'budget_view'),
+
     
     # Media root for js libraries (d3, jquery, css, etc.)
     #url(r'^media/(?P<path>.*)$', serve, {'document_root': settings.MEDIA_ROOT}),
@@ -52,6 +55,7 @@ urlpatterns = [
     # Test Area
     url('test/$', views.testview, kwargs={'variable': 'there'}, name='test'),
     url('transfer/$', views.transfer_amount, name='transfer'),
+
     
     url(r'^login/$', auth_views.login, name = 'login'),
     url(r'^logout/$', auth_views.logout, name = 'logout'),
